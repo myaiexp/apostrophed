@@ -41,6 +41,10 @@ physical kbd → keyd (grabs 046d:*, empty [main]) → keyd-virtual-keyboard
   `kb_layout=fi` to it (as it does to all keyboards), so emitted keycodes are
   interpreted under the Finnish keymap.
 
+**No feedback loop:** apostrophed only ever *reads* `keyd-virtual-keyboard` and
+*writes* its own separate uinput device; it never reads its own output, so emitted
+corrections can't re-enter the buffer.
+
 **Safe-crash property:** `EVIOCGRAB` is released by the kernel if the process
 dies, and Hyprland falls back to reading `keyd-virtual-keyboard` directly. So a
 crash means "contractions stop being fixed," never "keyboard dead." (A *hang*
@@ -69,19 +73,25 @@ never delayed), while a **shadow buffer** tracks the current word in parallel:
 
 ## Behavior
 
-- **Rules:** the 43 curated "safe" contractions (only forms whose apostrophe-less
+- **Rules:** 44 curated "safe" contractions (only forms whose apostrophe-less
   spelling is not itself a real English word — excludes `its`, `were`, `well`,
   `ill`, `id`, `wed`, `shed`, `hell`, `shell`, `lets`, `cant`, `wont`), plus
-  standalone `i` → `I`. Stored as a **data file** (`{trigger: replacement}`), not
-  code — they are irreducible data (`want`/`front` prove the `-n't` rule can't be
-  derived, so a curated list is correct, not lazy). Source of truth: the espanso
-  YAML we built this session.
+  standalone `i` → `I` — **45 rules total**. Stored as a **data file**
+  (`<trigger>\t<replacement>`), not code — they are irreducible data (`want`/`front`
+  prove the `-n't` rule can't be derived, so a curated list is correct, not lazy).
+  **Source of truth: `data/rules.tsv` in this repo** — captured from the espanso
+  YAML this session so it survives the Milestone 5 espanso teardown.
 - **Case-matching:** the buffer records shift-state per letter, so the correction
   mirrors what was typed:
   - all-lowercase trigger → replacement as-defined (`didnt` → `didn't`; `im` →
     `I'm`; `i` → `I` — intrinsic capitals preserved).
   - first-letter-uppercase → capitalize first letter (`Didnt` → `Didn't`).
   - all-uppercase → uppercase all (`DIDNT` → `DIDN'T`).
+  - **irregular/mixed case** that fits none of the three patterns (`dIdnt`,
+    `DidNT`) → **no correction**, pass through unchanged. These are typos/accidents;
+    not worth guessing an output.
+  - **no-op skip:** if the typed word already equals the corrected form, emit
+    nothing — no backspace/re-emit cycle on the hot path.
 - **No sentence-start auto-capitalization** — deliberately excluded. It's a
   false-positive minefield (`etc. the`, `v1.2`, `google.com/x`, ellipses) and the
   user does not want auto-capitalization at all beyond `i`→`I`.
@@ -106,6 +116,11 @@ services with binaries in `/usr/local/bin`):
   binary at `/usr/local/bin/apostrophed`, enabled at boot. Root sidesteps
   `/dev/uinput` + evdev-grab permission faff. This adds **no new trust boundary** —
   keyd and g915-gkeys already have full keystroke access as root on this box.
+- **Startup ordering (do NOT copy g915-gkeys verbatim):** g915-gkeys has no keyd
+  dependency, but apostrophed grabs `keyd-virtual-keyboard` *by name*, which only
+  exists once keyd is up. The unit must declare `After=keyd.service`, **and** the
+  daemon must wait/retry for the device to appear before grabbing (defensive
+  against ordering gaps and keyd restarts) rather than assuming it's present.
 - **Source repo** at `~/Projects/apostrophed/` with an **install script** that
   deploys the binary + unit (and any udev rule) and enables the service.
 
@@ -131,8 +146,9 @@ services with binaries in `/usr/local/bin`):
 ## Milestones (de-risking order)
 
 0. **Spike the grab-chain first:** prove apostrophed can grab
-   `keyd-virtual-keyboard`, forward transparently, and have Hyprland read our
-   uinput device — before building the engine. This is the core technical risk.
+   `keyd-virtual-keyboard` (with device-wait/retry + `After=keyd.service`), forward
+   transparently, and have Hyprland read our uinput device — before building the
+   engine. This is the core technical risk.
 1. Pure-function rewrite engine + unit tests.
 2. Wire engine to the live evdev loop; `--dry-run`.
 3. Layout-aware apostrophe emission.

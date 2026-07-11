@@ -1,0 +1,49 @@
+# apostrophed rule set — source of truth (survives espanso teardown).
+# Format: <trigger>\t<replacement>, one per line. Triggers are lowercase,
+# whole-word only. Only 'safe' contractions (apostrophe-less spelling is not
+# itself a real word). 'i'->'I' is net-new (not from espanso).
+didnt	didn't
+dont	don't
+doesnt	doesn't
+isnt	isn't
+arent	aren't
+wasnt	wasn't
+werent	weren't
+havent	haven't
+hasnt	hasn't
+hadnt	hadn't
+couldnt	couldn't
+wouldnt	wouldn't
+shouldnt	shouldn't
+mustnt	mustn't
+neednt	needn't
+aint	ain't
+im	I'm
+ive	I've
+youve	you've
+weve	we've
+theyve	they've
+couldve	could've
+shouldve	should've
+wouldve	would've
+mustve	must've
+youre	you're
+theyre	they're
+hes	he's
+shes	she's
+thats	that's
+whats	what's
+wheres	where's
+theres	there's
+whos	who's
+hows	how's
+youll	you'll
+theyll	they'll
+itll	it'll
+thatll	that'll
+youd	you'd
+theyd	they'd
+thatd	that'd
+oclock	o'clock
+yall	y'all
+i	I
