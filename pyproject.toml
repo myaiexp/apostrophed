@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+# Tests import the `apostrophed` package and read `data/rules.tsv` by relative
+# path, so they must run from the repo root with it on sys.path.
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.pyright]
+# Resolve the in-repo `apostrophed` package from the root (no installed dist).
+include = ["apostrophed", "tests"]
+extraPaths = ["."]
