@@ -18,10 +18,22 @@
 ├── docs/
 │   ├── ideas.md
 │   └── plans/
-│       └── apostrophed-design.md   # architecture + rationale (start here)
-├── src/                            # daemon + rewrite engine (added in impl)
-└── install.sh                      # deploys binary + systemd unit (added in impl)
+│       ├── apostrophed-design.md   # architecture + rationale (start here)
+│       └── apostrophed-plan.md     # implementation plan (executed)
+├── apostrophed/                    # the package
+│   ├── config.py    rules.py    tokens.py    engine.py   # pure core
+│   ├── keymap.py    # xkbcommon: char -> Keystroke (layout-derived)
+│   ├── decode.py    # evdev event -> Token + modifier/capslock tracking
+│   └── daemon.py    # grab/emit loop, signals, --passthrough/--dry-run
+├── data/rules.tsv                  # 45 rules (source of truth)
+├── tests/                          # pytest: rules, engine, decode, keymap, pipeline
+├── bin/apostrophed                 # installed launcher (sys.path shim -> main)
+├── apostrophed.service             # systemd unit (After=keyd.service)
+├── install.sh                      # deploys lib + data + unit + launcher; enables svc
+└── uninstall-espanso.sh            # teardown of the espanso experiment
 ```
+
+Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 
 ## Key Patterns
 
@@ -36,8 +48,8 @@
   Keep per-event processing trivial and non-blocking (a hang *would* stall input).
 - **Rewrite logic is pure functions** (event sequence → emitted events), unit-
   tested with synthetic keystrokes. The evdev loop is a thin shell around it.
-- **Rules are data**, not code — the ~43 safe contractions + `i`→`I` live in a
-  data file. Only "safe" forms (apostrophe-less spelling isn't a real word).
+- **Rules are data**, not code — 44 safe contractions + `i`→`I` (45 total) live in
+  `data/rules.tsv`. Only "safe" forms (apostrophe-less spelling isn't a real word).
 - **Layout derived, not hardcoded.** The apostrophe keystroke is resolved from the
   active XKB keymap at startup (espanso's bug was assuming US → produced `ä`).
 - **Toggle:** `pkill -USR1 apostrophed` pauses/resumes (paused = passthrough).
