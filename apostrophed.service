@@ -1,0 +1,15 @@
+[Unit]
+Description=apostrophed contraction fixer
+# keyd must be up first: we grab its `keyd virtual keyboard` by name. The daemon
+# also retries for the device, but ordering avoids a noisy first start.
+After=keyd.service systemd-udevd.service
+Wants=keyd.service
+
+[Service]
+ExecStart=/usr/local/bin/apostrophed
+# Device vanished (keyd restart) exits non-zero -> we re-grab the fresh device.
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

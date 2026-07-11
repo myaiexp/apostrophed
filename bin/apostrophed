@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Installed launcher: puts the deployed package dir on sys.path, runs the daemon.
+
+The package is installed to /usr/local/lib/apostrophed/; adding /usr/local/lib to
+sys.path makes `import apostrophed` resolve without a pip install.
+"""
+
+import sys
+
+sys.path.insert(0, "/usr/local/lib")
+
+from apostrophed.daemon import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())
