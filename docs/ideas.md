@@ -24,6 +24,19 @@ Future work, tech debt, and deferred capabilities. WHAT, not HOW.
   corrected word + boundary, retype the literal word). Pure-engine `_undo`; see
   [`plans/undo-on-backspace-design.md`](plans/undo-on-backspace-design.md).
 
+## 2026-07-14 — deferred from repo audit
+
+- **Physical-keyboard fallback (no keyd).** Grab the physical keyboard directly when
+  keyd is absent — most people don't run keyd, so this multiplies the addressable
+  audience. Safe-crash still holds (`EVIOCGRAB` releases on death → the compositor
+  reads the physical device directly). Deferred because it's a real feature, not a
+  small fallback: it re-solves what keyd hands us for free — selecting the *right*
+  device among many `EV_KEY` devices (mice, power buttons, consumer-control all look
+  like keyboards), grabbing *multiple* keyboards (laptop + external), and handling
+  **hotplug** in the input hot path. Needs its own design pass (device-selection +
+  hotplug model) before implementation. Contradicts today's "never grab the physical
+  keyboard" invariant, so it's a deliberate architecture change, not a tweak.
+
 ## 2026-07-13 — known limitations (post-implementation)
 
 - **CapsLock is remapped to Esc on this machine (keyd),** so `KEY_CAPSLOCK` never

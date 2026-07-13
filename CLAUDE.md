@@ -45,7 +45,11 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 
 - **Chains after keyd.** keyd grabs the physical Logitech devices (`046d:*`) and
   emits `keyd-virtual-keyboard`; apostrophed `EVIOCGRAB`s *that* virtual output and
-  re-emits through its own `uinput` device. Never grab the physical keyboard.
+  re-emits through its own `uinput` device. Never grab the physical keyboard. The
+  upstream device name is env-overridable (`APOSTROPHED_DEVICE_NAME`), and
+  `install.sh` preflights that keyd is installed + its virtual device is present
+  (else the daemon would restart-loop with no hint). Grabbing the *physical* keyboard
+  when keyd is absent is deferred future work — see `docs/ideas.md`.
 - **Race-free by construction.** We own output ordering, so the word-ending key
   always lands after the correction — the espanso reorder bug is impossible. See
   the design doc for why espanso fails.
@@ -61,7 +65,10 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 - **Rules are data**, not code — 44 safe contractions + `i`→`I` (45 total) live in
   `data/rules.tsv`. Only "safe" forms (apostrophe-less spelling isn't a real word).
 - **Layout derived, not hardcoded.** The apostrophe keystroke is resolved from the
-  active XKB keymap at startup (espanso's bug was assuming US → produced `ä`).
+  active XKB keymap at startup (espanso's bug was assuming US → produced `ä`). The
+  layout *name* is auto-detected by `install.sh` (`localectl` → pinned into a systemd
+  drop-in), falling back at runtime to `XKB_DEFAULT_LAYOUT` → `us`. The old `fi`
+  code-default silently mistyped for every non-`fi` user.
 - **Toggle:** `pkill -USR1 apostrophed` pauses/resumes (paused = passthrough).
   Works as your user (the daemon is yours), so the Hyprland keybind (`Alt+Shift+A`)
   and waybar click need no sudo. On each toggle the daemon writes `active`/`paused`

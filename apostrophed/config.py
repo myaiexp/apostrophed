@@ -9,14 +9,21 @@ from __future__ import annotations
 
 import os
 
-# XKB layout/variant used to derive emit keycodes. `fi` on this machine; override
-# via env so a layout change doesn't need a code edit.
-LAYOUT = os.environ.get("APOSTROPHED_LAYOUT", "fi")
-VARIANT = os.environ.get("APOSTROPHED_VARIANT", "")
+# XKB layout/variant used to derive emit keycodes. Must match the layout the
+# compositor applies to our uinput device, or the emitted apostrophe (and any AltGr
+# char) lands on the wrong keycode → wrong character, silently. Resolution order:
+# explicit APOSTROPHED_* → the standard libxkbcommon XKB_DEFAULT_* vars → "us"
+# (libxkbcommon's own default, the plurality choice). `install.sh` detects the
+# active layout (localectl) and pins it into a systemd drop-in, so a fresh install
+# is correct without any env fiddling — the "us" fallback is a last resort.
+LAYOUT = os.environ.get("APOSTROPHED_LAYOUT") or os.environ.get("XKB_DEFAULT_LAYOUT") or "us"
+VARIANT = os.environ.get("APOSTROPHED_VARIANT") or os.environ.get("XKB_DEFAULT_VARIANT") or ""
 
-# Match keyd's virtual output by NAME — the /dev/input/eventN node is not stable.
-DEVICE_NAME = "keyd virtual keyboard"
-POINTER_NAME = "keyd virtual pointer"
+# Match the upstream virtual keyboard by NAME — the /dev/input/eventN node is not
+# stable. Defaults to keyd's output; override to chain after a different virtual
+# keyboard (the single most setup-specific value, hence an env var like the rest).
+DEVICE_NAME = os.environ.get("APOSTROPHED_DEVICE_NAME", "keyd virtual keyboard")
+POINTER_NAME = os.environ.get("APOSTROPHED_POINTER_NAME", "keyd virtual pointer")
 
 # Source of truth for rules. Installed under the user's data dir by default; tests
 # set the env to the repo copy.

@@ -10,13 +10,13 @@
 The obvious tool is a text expander like [espanso](https://espanso.org/). On
 Wayland it fails for this use case with a fixed, un-tunable injection latency:
 espanso detects the word-ending space, then backspaces and re-types the correction
-through a *separate* virtual device while you keep typing. The next letter reliably
+through a _separate_ virtual device while you keep typing. The next letter reliably
 lands inside espanso's re-injected trailing space, producing `wouldn'tk now`
 instead of `wouldn't know`. Zeroing every configurable delay doesn't fix it — the
 latency is in the evdev path, and the tool is racing your real keystrokes.
 
 **apostrophed removes the race by construction.** It intercepts at the evdev layer
-and *owns* output ordering, so the word-ending key is always emitted *after* the
+and _owns_ output ordering, so the word-ending key is always emitted _after_ the
 correction. There is no second device racing you.
 
 ## How it works
@@ -26,7 +26,7 @@ physical kbd → keyd (grabs it, emits "keyd virtual keyboard")
              → [apostrophed grabs that] → apostrophed uinput device → compositor
 ```
 
-- **Grabs** `keyd virtual keyboard` with `EVIOCGRAB` (keyd's *virtual output*, never
+- **Grabs** `keyd virtual keyboard` with `EVIOCGRAB` (keyd's _virtual output_, never
   your physical keyboard), and **re-emits** through its own `uinput` device.
 - Every event is forwarded verbatim, while a shadow buffer tracks the current word.
   On a word boundary, if the buffer matches a rule, it emits backspaces + the
@@ -34,7 +34,7 @@ physical kbd → keyd (grabs it, emits "keyd virtual keyboard")
 - **Layout-aware:** the apostrophe keystroke is derived from the active XKB keymap
   at startup (not hardcoded), so it's correct on non-US layouts.
 - **Safe-crash:** `EVIOCGRAB` is released by the kernel on process death, so the
-  compositor falls back to reading keyd directly. A crash stops *corrections*, never
+  compositor falls back to reading keyd directly. A crash stops _corrections_, never
   the keyboard.
 - **Fast-typing safe:** when key rollover leaves a letter still held as the boundary
   fires, the daemon releases it before re-emitting, so nothing is dropped.
@@ -49,8 +49,8 @@ fully unit-tested without hardware; the evdev/uinput loop is a thin shell around
 
 - Linux with `/dev/uinput` and evdev
 - [**keyd**](https://github.com/rvaiya/keyd) — apostrophed chains after it, grabbing
-  `keyd virtual keyboard` by name. (Targeting a different virtual keyboard means
-  editing `DEVICE_NAME` in `apostrophed/config.py`.)
+  `keyd virtual keyboard` by name; `install.sh` checks it's installed and running.
+  (To chain after a different virtual keyboard, set `APOSTROPHED_DEVICE_NAME`.)
 - A Wayland compositor (developed on Hyprland)
 - Python 3.11+, [`python-evdev`](https://python-evdev.readthedocs.io/),
   [`python-xkbcommon`](https://github.com/sde1000/python-xkbcommon)
@@ -66,9 +66,11 @@ cd apostrophed
 ./install.sh          # NOT sudo — this is a user service
 ```
 
-`install.sh` is idempotent and fully user-space: it deploys the package to
+`install.sh` is idempotent and fully user-space: it preflights that keyd is
+installed and its virtual keyboard is present, **auto-detects your keyboard layout**
+(via `localectl`) and pins it into the unit, then deploys the package to
 `~/.local/lib`, rules to `~/.local/share`, launchers to `~/.local/bin`, and a user
-unit to `~/.config/systemd/user`, then enables and starts it. Check it:
+unit to `~/.config/systemd/user`, and enables and starts it. Check it:
 
 ```sh
 systemctl --user is-active apostrophed
@@ -100,7 +102,7 @@ APOSTROPHED_RULES=data/rules.tsv python -m apostrophed.daemon --dry-run
 
 ### Desktop integration (optional)
 
-Because the toggle is a plain signal to *your* process, wiring it up needs no
+Because the toggle is a plain signal to _your_ process, wiring it up needs no
 privilege bridge.
 
 **Hyprland keybind** — in `~/.config/hypr/bindings.conf`:
@@ -127,15 +129,17 @@ and place `"custom/apostrophed"` in one of the `modules-*` arrays. Style the
 
 ### Configuration (environment variables)
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `APOSTROPHED_LAYOUT` | `fi` | XKB layout used to derive emit keycodes |
-| `APOSTROPHED_VARIANT` | `""` | XKB variant |
-| `APOSTROPHED_RULES` | `~/.local/share/apostrophed/rules.tsv` | rule file path |
-| `APOSTROPHED_IDLE_RESET` | `4.0` | seconds of silence before the word buffer resets |
-| `APOSTROPHED_STATE` | `$XDG_RUNTIME_DIR/apostrophed/state` | enabled/paused state file for indicators |
-| `APOSTROPHED_APOSTROPHE_KEYCODE` | *(derived)* | escape hatch: force an evdev keycode for `'` |
-| `APOSTROPHED_DEBUG` | *(off)* | log each applied correction |
+| Variable                         | Default                                 | Purpose                                                                        |
+| -------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
+| `APOSTROPHED_LAYOUT`             | detected → `XKB_DEFAULT_LAYOUT` → `us`  | XKB layout used to derive emit keycodes (`install.sh` pins the detected value) |
+| `APOSTROPHED_VARIANT`            | detected → `XKB_DEFAULT_VARIANT` → `""` | XKB variant                                                                    |
+| `APOSTROPHED_DEVICE_NAME`        | `keyd virtual keyboard`                 | name of the upstream virtual keyboard to grab                                  |
+| `APOSTROPHED_POINTER_NAME`       | `keyd virtual pointer`                  | name of the pointer watched for click-reset                                    |
+| `APOSTROPHED_RULES`              | `~/.local/share/apostrophed/rules.tsv`  | rule file path                                                                 |
+| `APOSTROPHED_IDLE_RESET`         | `4.0`                                   | seconds of silence before the word buffer resets                               |
+| `APOSTROPHED_STATE`              | `$XDG_RUNTIME_DIR/apostrophed/state`    | enabled/paused state file for indicators                                       |
+| `APOSTROPHED_APOSTROPHE_KEYCODE` | _(derived)_                             | escape hatch: force an evdev keycode for `'`                                   |
+| `APOSTROPHED_DEBUG`              | _(off)_                                 | log each applied correction                                                    |
 
 ## Rules
 
@@ -160,8 +164,9 @@ without hardware.
 
 ## Caveats
 
-- Built and tested for a **keyd + Hyprland + `fi`** setup; other layouts work via
-  `APOSTROPHED_LAYOUT`, other virtual keyboards via `DEVICE_NAME`.
+- Built and tested for a **keyd + Hyprland + `fi`** setup; the layout is auto-
+  detected at install (override with `APOSTROPHED_LAYOUT`), and a non-keyd virtual
+  keyboard works via `APOSTROPHED_DEVICE_NAME`.
 - Remaining known edge cases are tracked in [`docs/ideas.md`](docs/ideas.md).
 
 Design rationale, data flow, and alternatives considered:
