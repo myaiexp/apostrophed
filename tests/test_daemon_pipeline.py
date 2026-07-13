@@ -7,6 +7,7 @@ the boundary key is forwarded AFTER the backspaces + rewrite, never before (the
 espanso reorder bug is structurally impossible here).
 """
 
+import pytest
 from evdev import InputEvent, ecodes
 
 from apostrophed.daemon import Daemon
@@ -19,10 +20,12 @@ RULES = load_rules("data/rules.tsv")
 EV_KEY = ecodes.EV_KEY
 KEY_BACKSPACE = ecodes.KEY_BACKSPACE
 KEY_LEFTSHIFT = ecodes.KEY_LEFTSHIFT
+KEY_RIGHTSHIFT = ecodes.KEY_RIGHTSHIFT
 KEY_RIGHTALT = ecodes.KEY_RIGHTALT
 KEY_SPACE = ecodes.KEY_SPACE
 KEY_CAPSLOCK = ecodes.KEY_CAPSLOCK
 _EMIT_MODS = {KEY_LEFTSHIFT, KEY_RIGHTALT}
+_SHIFT_KEYS = {KEY_LEFTSHIFT, KEY_RIGHTSHIFT}
 
 
 class FakeUInput:
@@ -158,3 +161,61 @@ def test_non_trigger_passes_through_untouched():
     log = ui.log
     assert count_emit_down(log, KEY_BACKSPACE) == 0
     assert emitted_char_keycodes(log) == []  # nothing injected
+
+
+def hold_shift_type(d, word, shift_key=KEY_LEFTSHIFT, boundary=KEY_SPACE):
+    """Physically hold ``shift_key`` for the entire word AND the boundary — the
+    all-caps "never let go of Shift" scenario. Shift is left held on return."""
+    _ev(d, shift_key, 1)
+    for ch in word:
+        _ev(d, key_for_char(ch), 1)
+        _ev(d, key_for_char(ch), 0)
+    _ev(d, boundary, 1)  # correction fires here, still under held Shift
+
+
+def emitted_chars_with_shift(log):
+    """Replay the log in order tracking the app-visible Shift state (from BOTH
+    forwarded physical events and injected taps — they share one keycode), and
+    for each injected char key-down return ``(keycode, shift_active_at_emit)``."""
+    down = set()
+    out = []
+    for k, t, c, v in log:
+        if t != EV_KEY:
+            continue
+        if c in _SHIFT_KEYS:
+            down.add(c) if v == 1 else down.discard(c)
+        elif k == "EMIT" and v == 1 and c != KEY_BACKSPACE:
+            out.append((c, bool(down)))
+    return out
+
+
+def final_shift_down(log):
+    """The app-visible Shift state after the whole sequence has been replayed."""
+    down = set()
+    for _k, t, c, v in log:
+        if t == EV_KEY and c in _SHIFT_KEYS:
+            down.add(c) if v == 1 else down.discard(c)
+    return bool(down)
+
+
+@pytest.mark.parametrize("shift_key", [KEY_LEFTSHIFT, KEY_RIGHTSHIFT])
+def test_shift_held_across_correction(shift_key):
+    # Holding Shift through a whole word makes an all-caps correction fire while
+    # Shift is still physically down. The rewrite's per-char taps drive Shift
+    # themselves, which must not collide with the held physical key:
+    #   - Left-Shift: taps leave it released -> following letters go lowercase.
+    #   - Right-Shift: taps use a *different* keycode, so it stays latched and
+    #     leaks into the unshifted apostrophe tap -> "WOULDN'T" becomes "WOULDN*T".
+    d, ui, km = make_daemon()
+    hold_shift_type(d, "wouldnt", shift_key=shift_key)
+    log = ui.log
+    chars = emitted_chars_with_shift(log)
+
+    # The rewrite is un-corrupted: right keys, and each char carries the correct
+    # app-side Shift (letters shifted, the injected apostrophe NOT — even though
+    # the user is holding Shift).
+    assert [c for c, _ in chars] == [km.stroke(c).keycode for c in "WOULDN'T"]
+    assert [s for _, s in chars] == [ch != "'" for ch in "WOULDN'T"]
+
+    # ...and Shift is still down afterwards, so the next letters stay uppercase.
+    assert final_shift_down(log)

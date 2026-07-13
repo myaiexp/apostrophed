@@ -35,6 +35,11 @@ from .engine import Engine
 from .rules import load_rules
 from .tokens import Correction, Reset
 
+# Shift keycodes a physically-held Shift can arrive on. Suspended around a rewrite
+# (see ``Daemon._suspend_shift``) so the correction's own per-char Shift taps don't
+# collide with a Shift the user is holding across the word.
+_SHIFT_KEYS = (ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT)
+
 
 def log(msg: str) -> None:
     print(f"apostrophed: {msg}", flush=True)
@@ -160,6 +165,37 @@ class Daemon:
             self._held.discard(code)
         self.ui.syn()  # type: ignore[union-attr]
 
+    def _suspend_shift(self) -> list[int]:
+        """Lift any physically-held Shift on the output side so the rewrite's
+        per-char taps run against a clean baseline, and return the codes to
+        re-press afterwards.
+
+        A correction's taps drive ``KEY_LEFTSHIFT`` themselves. If the user is
+        still holding Shift across the word (an all-caps correction), that collides
+        two ways: a held *Left*-Shift is left released by the final tap (so the
+        next letters go lowercase), and a held *Right*-Shift — a different keycode
+        the taps never touch — stays latched and leaks into the unshifted
+        apostrophe tap (``didn't`` -> ``didn*t`` on layouts where ``'`` is
+        unshifted). Both vanish if we drop Shift for the duration of the rewrite.
+
+        ``self._held`` is left untouched: the physical key is still down and its
+        eventual release event must still find it there to be discarded."""
+        held = [c for c in _SHIFT_KEYS if c in self._held]
+        for code in held:
+            self.ui.write(ecodes.EV_KEY, code, 0)  # type: ignore[union-attr]
+        if held:
+            self.ui.syn()  # type: ignore[union-attr]
+        return held
+
+    def _restore_shift(self, codes: list[int]) -> None:
+        """Re-press the Shift keys suspended for the rewrite, matching the app-side
+        state back to the still-held physical keys so following letters keep their
+        case."""
+        for code in codes:
+            self.ui.write(ecodes.EV_KEY, code, 1)  # type: ignore[union-attr]
+        if codes:
+            self.ui.syn()  # type: ignore[union-attr]
+
     # --- per-event dispatch ---------------------------------------------------
 
     def _handle_kbd_event(self, event) -> None:
@@ -191,11 +227,15 @@ class Daemon:
         if config.DEBUG:
             log(f"correct: -{corr.delete_count} +{corr.text!r}")
         # Release any rollover keys still held from fast typing (else the rewrite's
-        # re-emitted press of that same letter is a no-op), then inject and finally
-        # forward the held boundary in its own frame. `keep=event.code` guards the
+        # re-emitted press of that same letter is a no-op), and drop any Shift the
+        # user is holding across the word (else it collides with the taps' own Shift
+        # — see `_suspend_shift`). Inject the rewrite, restore the held Shift, then
+        # forward the boundary in its own frame. `keep=event.code` guards the
         # boundary key, which we forward ourselves below.
         self._release_held(keep=event.code)
+        shift = self._suspend_shift()
         self._apply_correction(corr)
+        self._restore_shift(shift)
         self._forward(event)
         self.ui.syn()  # type: ignore[union-attr]
 

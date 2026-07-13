@@ -24,14 +24,6 @@ Future work, tech debt, and deferred capabilities. WHAT, not HOW.
 
 ## 2026-07-13 — known limitations (post-implementation)
 
-- **Shift held continuously across a corrected word.** The rewrite's per-char taps
-  press and release Shift themselves; if you're *physically* holding Shift through
-  the whole word and the following boundary, the last tap leaves the app-side Shift
-  released, so letters typed while still holding Shift can render lowercase until
-  Shift is re-pressed. Rare (nobody holds Shift across a space). Fix if it ever
-  bites: after `_apply_correction`, re-assert any Shift/modifier still in the
-  daemon's held-key set. See the rollover fix (`_release_held`) for the held-key
-  tracking this would build on.
 - **CapsLock is remapped to Esc on this machine (keyd),** so `KEY_CAPSLOCK` never
   reaches the daemon and the CapsLock-compensation emission path is inert here —
   it's kept for layout/portability correctness but is untested live on this box.
