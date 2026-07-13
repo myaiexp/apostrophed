@@ -107,7 +107,15 @@ Single source of truth: `__version__` in `apostrophed/__init__.py`, surfaced by
 - **PATCH** (`0.x.y+1`) — a bug fix with no new behavior.
 - **No bump** — docs, tests, refactors, or cleanups with no user-visible effect.
 
-Bump in the same commit that ships the change. Tag `vX.Y.Z` to mark a release.
+When a change warrants a bump, apply it automatically — don't ask, and don't defer
+it. This section is standing authorization to tag as well. The flow:
+
+1. Bump `__version__` in the same commit that ships the change.
+2. After committing, tag it: `git tag -a vX.Y.Z -m "apostrophed X.Y.Z"`.
+3. `git deployboth` pushes commits but **not** tags — also `git push origin vX.Y.Z`.
+
+Docs/tests/refactor commits don't bump and don't tag. Keep `__version__` and the
+tags in lockstep, so every `vX.Y.Z` marks a real behavior change.
 
 ---
 
