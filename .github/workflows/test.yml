@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # xkbcommon (Python binding) builds against libxkbcommon headers; xkb-data
+      # provides the XKB keymap data the tests compile the `fi` layout from; evdev
+      # builds against the kernel input headers already present on the runner.
+      - name: Install libxkbcommon + XKB keymap data
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev xkb-data
+
+      - name: Install Python dependencies
+        run: pip install evdev xkbcommon pytest
+
+      # The whole suite is hardware-free (evdev/uinput are stubbed), so it runs on
+      # a headless runner with no /dev/uinput and no real keyboard.
+      - name: Run tests
+        run: python -m pytest -q
