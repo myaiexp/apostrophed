@@ -36,7 +36,7 @@
 ├── bin/apostrophed-waybar          # waybar module: reads state file, inotify-driven
 ├── apostrophed.service             # systemd USER unit (WantedBy=default.target)
 ├── install.sh                      # user-space deploy (no sudo); systemctl --user
-└── uninstall-espanso.sh            # teardown of the espanso experiment
+└── uninstall.sh                    # reverse of install.sh: stop/disable + rm files
 ```
 
 Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).

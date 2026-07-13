@@ -81,6 +81,17 @@ journalctl --user -u apostrophed -f
 > out and back in. That is the only privileged step, and it's a one-time account
 > change — the daemon itself never runs as root.
 
+## Uninstall
+
+```sh
+./uninstall.sh        # stops + disables the service, removes installed files
+```
+
+The exact inverse of `install.sh`, no root. Your keyboard is unaffected (Hyprland
+falls back to reading keyd directly). It leaves `evdev`/`xkbcommon` and keyd in
+place (installed separately), and any Hyprland keybind or waybar module you added —
+remove those by hand.
+
 ## Usage
 
 Once installed it just runs. To pause/resume (paused = pure passthrough):
