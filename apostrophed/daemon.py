@@ -196,6 +196,20 @@ class Daemon:
         if codes:
             self.ui.syn()  # type: ignore[union-attr]
 
+    def _release_all_keys(self) -> None:
+        """Blanket key-release on startup: emit an up for every key our device can
+        emit, clearing anything the compositor may still think is held. A key-up
+        lost during a grab handoff (this service restarting mid-keystroke) otherwise
+        leaves a key 'stuck down' until a manual stop — an up for an un-pressed key
+        is a harmless no-op, so releasing them all is a safe reset. Ups only: a lone
+        up can't untoggle a lock (e.g. CapsLock), while a down would flip it, so
+        locks are left to the compositor's own state."""
+        ui, kbd = self.ui, self.kbd
+        assert ui is not None and kbd is not None
+        for code in kbd.capabilities().get(ecodes.EV_KEY, []):
+            ui.write(ecodes.EV_KEY, code, 0)
+        ui.syn()
+
     # --- per-event dispatch ---------------------------------------------------
 
     def _handle_kbd_event(self, event) -> None:
@@ -292,6 +306,7 @@ class Daemon:
         log(f"found {config.DEVICE_NAME!r} at {self.kbd.path}")
         self.kbd.grab()
         self.ui = UInput.from_device(self.kbd, name="apostrophed")
+        self._release_all_keys()  # clear any key stranded by a prior grab handoff
         log("grabbed keyboard; emitting via uinput 'apostrophed'")
 
         if self.mode != "passthrough":

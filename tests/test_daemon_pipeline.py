@@ -226,6 +226,25 @@ def test_backspace_without_correction_passes_through():
     assert any(k == "FWD" and c == KEY_BACKSPACE and v == 1 for (k, _t, c, v) in after)
 
 
+def test_startup_release_emits_up_for_every_key_no_downs():
+    # On startup the daemon blanket-releases every key its device can emit, so a
+    # key-up lost during a grab handoff can't leave a key stuck down. Only ups are
+    # emitted (a down could flip a lock like CapsLock).
+    d, ui, _km = make_daemon()
+
+    class FakeKbd:
+        def capabilities(self):
+            return {EV_KEY: [KEY_SPACE, KEY_LEFTSHIFT, key_for_char("a"), KEY_CAPSLOCK]}
+
+    d.kbd = FakeKbd()  # type: ignore[assignment]
+    d._release_all_keys()
+
+    ups = {c for (k, t, c, v) in ui.log if k == "EMIT" and t == EV_KEY and v == 0}
+    assert ups == {KEY_SPACE, KEY_LEFTSHIFT, key_for_char("a"), KEY_CAPSLOCK}
+    # never a key-down — that could press a key or toggle a lock on startup
+    assert not any(k == "EMIT" and t == EV_KEY and v == 1 for (k, t, c, v) in ui.log)
+
+
 def test_write_state_publishes_active_and_paused(tmp_path, monkeypatch):
     from apostrophed import config
 
