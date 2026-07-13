@@ -9,6 +9,17 @@ from __future__ import annotations
 
 import os
 
+
+def _env_bool(name: str) -> bool:
+    """True unless the var is unset/empty or an explicit falsy token.
+
+    ``bool(os.environ.get(...))`` is the classic trap — it makes *any* non-empty
+    string truthy, so ``APOSTROPHED_DEBUG=0`` (or ``false``/``off``) would wrongly
+    turn the flag on. Treat the usual falsy strings as off; anything else set is on.
+    """
+    return os.environ.get(name, "").strip().lower() not in ("", "0", "false", "no", "off")
+
+
 # XKB layout/variant used to derive emit keycodes. Must match the layout the
 # compositor applies to our uinput device, or the emitted apostrophe (and any AltGr
 # char) lands on the wrong keycode → wrong character, silently. Resolution order:
@@ -47,5 +58,5 @@ _apos = os.environ.get("APOSTROPHED_APOSTROPHE_KEYCODE")
 APOSTROPHE_KEYCODE: int | None = int(_apos) if _apos else None
 
 # When set, log each applied correction in real mode (diagnostic; off by default
-# to keep the journal quiet).
-DEBUG = bool(os.environ.get("APOSTROPHED_DEBUG"))
+# to keep the journal quiet). Falsy strings ("0", "false", "no", "off") stay off.
+DEBUG = _env_bool("APOSTROPHED_DEBUG")

@@ -60,3 +60,24 @@ def test_device_name_defaults_to_keyd(monkeypatch):
     monkeypatch.delenv("APOSTROPHED_DEVICE_NAME", raising=False)
     importlib.reload(config)
     assert config.DEVICE_NAME == "keyd virtual keyboard"
+
+
+@pytest.mark.parametrize("value", ["0", "false", "False", "off", "no", ""])
+def test_debug_falsy_values_stay_off(monkeypatch, value):
+    # bool(os.environ.get(...)) got this wrong: "0"/"false" were truthy → debug on.
+    monkeypatch.setenv("APOSTROPHED_DEBUG", value)
+    importlib.reload(config)
+    assert config.DEBUG is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "on", "yes"])
+def test_debug_truthy_values_turn_on(monkeypatch, value):
+    monkeypatch.setenv("APOSTROPHED_DEBUG", value)
+    importlib.reload(config)
+    assert config.DEBUG is True
+
+
+def test_debug_unset_is_off(monkeypatch):
+    monkeypatch.delenv("APOSTROPHED_DEBUG", raising=False)
+    importlib.reload(config)
+    assert config.DEBUG is False
