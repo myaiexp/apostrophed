@@ -218,25 +218,30 @@ class Daemon:
             self._forward(event)
             return
 
-        # A Correction only ever comes back on a WordBoundary key-down. Inject the
-        # rewrite, THEN forward the held boundary — never the other way around.
+        # A Correction comes back on a WordBoundary key-down (rewrite the word) or a
+        # Backspace key-down (undo the correction that just fired). The trigger is
+        # forwarded for a boundary — real input that must land after the rewrite —
+        # but CONSUMED for an undo, whose Backspace is spent reverting (forwarding it
+        # would delete an extra char).
+        is_undo = event.code == ecodes.KEY_BACKSPACE
+        kind = "undo" if is_undo else "correct"
         if self.mode == "dry-run":
-            log(f"[dry-run] correct: -{corr.delete_count} +{corr.text!r}")
+            log(f"[dry-run] {kind}: -{corr.delete_count} +{corr.text!r}")
             self._forward(event)
             return
         if config.DEBUG:
-            log(f"correct: -{corr.delete_count} +{corr.text!r}")
+            log(f"{kind}: -{corr.delete_count} +{corr.text!r}")
         # Release any rollover keys still held from fast typing (else the rewrite's
         # re-emitted press of that same letter is a no-op), and drop any Shift the
         # user is holding across the word (else it collides with the taps' own Shift
         # — see `_suspend_shift`). Inject the rewrite, restore the held Shift, then
-        # forward the boundary in its own frame. `keep=event.code` guards the
-        # boundary key, which we forward ourselves below.
+        # forward the trigger (boundary only) in its own frame.
         self._release_held(keep=event.code)
         shift = self._suspend_shift()
         self._apply_correction(corr)
         self._restore_shift(shift)
-        self._forward(event)
+        if not is_undo:
+            self._forward(event)
         self.ui.syn()  # type: ignore[union-attr]
 
     def _write_state(self) -> None:

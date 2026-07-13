@@ -92,3 +92,54 @@ def test_every_rule_roundtrips():
     e = Engine(RULES)
     for trig, repl in RULES.items():
         assert feed_word(e, trig) == Correction(len(trig), repl)
+
+
+# --- undo-on-backspace ------------------------------------------------------
+
+def test_backspace_after_correction_reverts():
+    # "didnt" -> "didn't "; Backspace rewinds: delete len("didn't")+1 (word +
+    # boundary), retype the original literal word.
+    e = Engine(RULES)
+    assert feed_word(e, "didnt") == Correction(5, "didn't")
+    assert e.feed(Backspace()) == Correction(7, "didnt")  # len("didn't")+1
+
+
+def test_undo_preserves_original_case():
+    e = Engine(RULES)
+    assert feed_word(e, "DIDNT") == Correction(5, "DIDN'T")
+    assert e.feed(Backspace()) == Correction(7, "DIDNT")
+
+
+def test_undo_disarmed_by_letter():
+    e = Engine(RULES)
+    feed_word(e, "didnt")
+    e.feed(Letter("x"))  # any input after the correction closes the window
+    assert e.feed(Backspace()) is None  # normal pop of the 'x', not an undo
+
+
+def test_undo_disarmed_by_boundary():
+    e = Engine(RULES)
+    feed_word(e, "didnt")
+    e.feed(WordBoundary())  # a fresh boundary supersedes the undo window
+    assert e.feed(Backspace()) is None
+
+
+def test_undo_disarmed_by_reset():
+    e = Engine(RULES)
+    feed_word(e, "didnt")
+    e.feed(Reset())
+    assert e.feed(Backspace()) is None
+
+
+def test_undo_not_rearmed_after_firing():
+    e = Engine(RULES)
+    feed_word(e, "didnt")
+    assert e.feed(Backspace()) == Correction(7, "didnt")  # undo fires
+    assert e.feed(Backspace()) is None  # second Backspace is a normal delete
+
+
+def test_backspace_without_prior_correction_is_normal():
+    # a non-trigger word leaves nothing armed; Backspace just pops the buffer
+    e = Engine(RULES)
+    assert feed_word(e, "hello") is None
+    assert e.feed(Backspace()) is None

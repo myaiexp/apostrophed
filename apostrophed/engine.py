@@ -37,18 +37,30 @@ class Engine:
     def __init__(self, rules: dict[str, str]) -> None:
         self._rules = rules
         self._buffer: list[str] = []
+        # Pre-baked revert, armed the instant a correction fires and disarmed by the
+        # very next token: a single Backspace right after a correction "rewinds" it.
+        self._undo: Correction | None = None
 
     def feed(self, token: Token) -> Correction | None:
-        """Advance the buffer by one token; return a ``Correction`` only when a
-        ``WordBoundary`` completes a matching, case-consistent, non-no-op word."""
+        """Advance the buffer by one token; return a ``Correction`` when a
+        ``WordBoundary`` completes a matching, case-consistent, non-no-op word, or
+        when a ``Backspace`` reverts the correction that just fired."""
         if isinstance(token, Letter):
+            self._undo = None
             self._buffer.append(token.char)
             return None
         if isinstance(token, Backspace):
+            # One Backspace right after a correction reverts it (the undo window);
+            # otherwise Backspace just syncs the buffer with the user's edit.
+            if self._undo is not None:
+                undo, self._undo = self._undo, None
+                self._buffer.clear()  # already empty post-correction; defensive
+                return undo
             if self._buffer:
                 self._buffer.pop()
             return None
         if isinstance(token, Reset):
+            self._undo = None
             self._buffer.clear()
             return None
         if isinstance(token, WordBoundary):
@@ -58,10 +70,14 @@ class Engine:
     def _evaluate(self) -> Correction | None:
         typed = "".join(self._buffer)
         self._buffer.clear()  # a boundary always ends the word, match or not
+        self._undo = None  # a new boundary supersedes any pending undo window
         replacement = self._rules.get(typed.lower())
         if replacement is None:
             return None
         result = _recase(typed, replacement)
         if result is None or result == typed:  # mixed case, or already correct
             return None
+        # Arm the revert: undo deletes the corrected word + the one boundary char
+        # emitted after it, then retypes the original literal word (rewind model).
+        self._undo = Correction(delete_count=len(result) + 1, text=typed)
         return Correction(delete_count=len(typed), text=result)

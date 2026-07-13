@@ -38,6 +38,9 @@ physical kbd → keyd (grabs it, emits "keyd virtual keyboard")
   the keyboard.
 - **Fast-typing safe:** when key rollover leaves a letter still held as the boundary
   fires, the daemon releases it before re-emitting, so nothing is dropped.
+- **Undo on Backspace:** hitting Backspace immediately after a correction rewinds
+  it — the corrected word and the space that triggered it are removed and your
+  literal word is retyped. Any other keystroke first cancels the window.
 
 The correction logic is a set of **pure functions** (token stream → correction),
 fully unit-tested without hardware; the evdev/uinput loop is a thin shell around it.

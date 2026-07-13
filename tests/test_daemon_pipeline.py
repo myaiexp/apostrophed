@@ -198,6 +198,34 @@ def final_shift_down(log):
     return bool(down)
 
 
+def test_undo_on_backspace_reverts_correction():
+    # Backspace immediately after a correction rewinds it: delete the corrected
+    # word + the boundary char, retype the original literal word, and DON'T forward
+    # the triggering Backspace (else it'd delete an extra char).
+    d, ui, km = make_daemon()
+    type_word(d, "didnt")  # correction fires: "didnt " -> "didn't "
+    mark = len(ui.log)
+    _ev(d, KEY_BACKSPACE, 1)  # undo
+    undo = ui.log[mark:]
+
+    assert count_emit_down(undo, KEY_BACKSPACE) == len("didn't") + 1  # word + space
+    assert emitted_char_keycodes(undo) == [km.stroke(c).keycode for c in "didnt"]
+    assert not any(k == "FWD" and c == KEY_BACKSPACE for (k, _t, c, _v) in undo)
+
+
+def test_backspace_without_correction_passes_through():
+    # A Backspace not preceded by a correction is forwarded verbatim (no undo).
+    d, ui, _km = make_daemon()
+    type_word(d, "hello")  # no correction
+    mark = len(ui.log)
+    _ev(d, KEY_BACKSPACE, 1)
+    after = ui.log[mark:]
+
+    assert count_emit_down(after, KEY_BACKSPACE) == 0  # nothing injected
+    assert emitted_char_keycodes(after) == []
+    assert any(k == "FWD" and c == KEY_BACKSPACE and v == 1 for (k, _t, c, v) in after)
+
+
 def test_write_state_publishes_active_and_paused(tmp_path, monkeypatch):
     from apostrophed import config
 

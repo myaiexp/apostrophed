@@ -54,6 +54,10 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
   Keep per-event processing trivial and non-blocking (a hang *would* stall input).
 - **Rewrite logic is pure functions** (event sequence → emitted events), unit-
   tested with synthetic keystrokes. The evdev loop is a thin shell around it.
+- **Undo-on-backspace** lives in the pure engine as `_undo` (a pre-baked revert
+  `Correction`): armed when a correction fires, disarmed by the next token. A
+  Backspace while armed rewinds the correction; the daemon consumes that Backspace
+  (doesn't forward it). See `docs/plans/undo-on-backspace-design.md`.
 - **Rules are data**, not code — 44 safe contractions + `i`→`I` (45 total) live in
   `data/rules.tsv`. Only "safe" forms (apostrophe-less spelling isn't a real word).
 - **Layout derived, not hardcoded.** The apostrophe keystroke is resolved from the
