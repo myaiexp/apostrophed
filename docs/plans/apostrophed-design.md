@@ -50,6 +50,16 @@ dies, and Hyprland falls back to reading `keyd-virtual-keyboard` directly. So a
 crash means "contractions stop being fixed," never "keyboard dead." (A *hang*
 could stall input, so per-event processing must stay trivial and non-blocking.)
 
+**Grab-handoff stranded keys:** the flip side of owning output ordering is that a
+restart *mid-keystroke* can drop a key-up in the ungrab→regrab gap, leaving a key
+stuck "down" in the compositor (observed once as a held space in-game, plus an
+inverted `i`→`I` correction from a stranded modifier — until the daemon is
+stopped). This is **not** a dispatch-logic bug: ~210k fuzzed rollover sequences
+confirm balanced input never strands a key, so the imbalance is the lost handoff
+event. Mitigation: on startup the daemon blanket-releases every key it can emit
+(`_release_all_keys`, ups only so a lock like CapsLock isn't flipped), so a
+stranded key self-heals on the next (re)start instead of needing a manual stop.
+
 ## Event pipeline / data flow
 
 Every event is **forwarded through** to the output unchanged (normal typing is

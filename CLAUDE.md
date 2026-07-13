@@ -56,6 +56,13 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 - **Safe-crash.** `EVIOCGRAB` releases on process death → Hyprland falls back to
   reading `keyd-virtual-keyboard`. A crash stops corrections, never the keyboard.
   Keep per-event processing trivial and non-blocking (a hang *would* stall input).
+- **Startup key-reset.** A grab handoff (the service restarting *mid-keystroke*) can
+  drop a key-up, stranding a key "down" in the compositor (seen once as a stuck
+  space + an inverted `i` from a stranded modifier). `Daemon._release_all_keys`
+  blanket-emits an up for every key on startup (ups only — a down would flip a lock
+  like CapsLock), so any stranded key self-heals on restart. The dispatch logic
+  itself never strands a key from balanced input (verified by ~210k fuzzed
+  rollover sequences); the imbalance only comes from the handoff.
 - **Rewrite logic is pure functions** (event sequence → emitted events), unit-
   tested with synthetic keystrokes. The evdev loop is a thin shell around it.
 - **Undo-on-backspace** lives in the pure engine as `_undo` (a pre-baked revert
