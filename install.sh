@@ -27,13 +27,33 @@ if ! id -nG | tr ' ' '\n' | grep -qx input; then
     exit 1
 fi
 
-# Runtime deps are system packages (system python runs the service).
+# Detect the package manager once, so dependency guidance isn't Arch-only. Sets
+# PM_CMD (the install command) and PM_PYPFX (the distro's Python-package prefix:
+# python- on Arch, python3- everywhere else). Both stay empty on an unknown distro,
+# and callers fall back to a distro-agnostic hint.
+PM_CMD=""; PM_PYPFX=""
+if command -v pacman >/dev/null 2>&1; then PM_CMD="sudo pacman -S --noconfirm"; PM_PYPFX="python-"
+elif command -v apt-get >/dev/null 2>&1; then PM_CMD="sudo apt install"; PM_PYPFX="python3-"
+elif command -v dnf >/dev/null 2>&1; then PM_CMD="sudo dnf install"; PM_PYPFX="python3-"
+elif command -v zypper >/dev/null 2>&1; then PM_CMD="sudo zypper install"; PM_PYPFX="python3-"
+fi
+
+# Runtime deps are the `evdev` and `xkbcommon` Python modules (system python runs
+# the service). Distro package names follow the PM_PYPFX convention, so we derive
+# them from the module name rather than hardcode a per-distro table. The tracked
+# module names double as the PyPI names, so the pip line — printed always, since
+# some distros don't package xkbcommon (e.g. Fedora) — needs no separate mapping.
 missing=()
-python3 -c "import evdev" 2>/dev/null || missing+=(python-evdev)
-python3 -c "from xkbcommon import xkb" 2>/dev/null || missing+=(python-xkbcommon)
+python3 -c "import evdev" 2>/dev/null || missing+=(evdev)
+python3 -c "from xkbcommon import xkb" 2>/dev/null || missing+=(xkbcommon)
 if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "error: missing Python deps: ${missing[*]}" >&2
-    echo "       install with: sudo pacman -S --noconfirm ${missing[*]}" >&2
+    echo "error: missing Python modules: ${missing[*]}" >&2
+    if [[ -n "$PM_CMD" ]]; then
+        pkgs=(); for m in "${missing[@]}"; do pkgs+=("${PM_PYPFX}${m}"); done
+        echo "       install with: $PM_CMD ${pkgs[*]}" >&2
+    fi
+    echo "       or via pip (any distro; needs a C compiler + libxkbcommon dev headers):" >&2
+    echo "         pip install --user ${missing[*]}" >&2
     exit 1
 fi
 
@@ -43,8 +63,12 @@ fi
 DEVICE_NAME="${APOSTROPHED_DEVICE_NAME:-keyd virtual keyboard}"
 if ! command -v keyd >/dev/null 2>&1; then
     echo "error: keyd not found — apostrophed grabs keyd's virtual keyboard." >&2
-    echo "       install it (https://github.com/rvaiya/keyd), e.g.:" >&2
-    echo "         sudo pacman -S --noconfirm keyd && sudo systemctl enable --now keyd" >&2
+    echo "       install it (https://github.com/rvaiya/keyd) and enable it:" >&2
+    if [[ -n "$PM_CMD" ]]; then
+        echo "         $PM_CMD keyd && sudo systemctl enable --now keyd" >&2
+    else
+        echo "         (build per the keyd README), then: sudo systemctl enable --now keyd" >&2
+    fi
     echo "       (or chain after another virtual keyboard: APOSTROPHED_DEVICE_NAME=...)" >&2
     exit 1
 fi
