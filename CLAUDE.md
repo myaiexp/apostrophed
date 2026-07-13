@@ -65,6 +65,13 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
   rollover sequences); the imbalance only comes from the handoff.
 - **Rewrite logic is pure functions** (event sequence → emitted events), unit-
   tested with synthetic keystrokes. The evdev loop is a thin shell around it.
+- **Privacy is a verified invariant** (README **Privacy** section is a public trust
+  claim). Typed content lives only in `Engine._buffer` — in-memory, one word, cleared
+  on every boundary/reset; nothing is serialized; there is no network/subprocess code;
+  the only file written is the `active`/`paused` state (no keystrokes, tmpfs). The
+  sole path that logs typed-derived content is the opt-in `--dry-run`/`APOSTROPHED_DEBUG`
+  (corrected words → journal). If a change ever writes to disk, logs typed content, or
+  adds a network call, update the README Privacy section in the same commit.
 - **Undo-on-backspace** lives in the pure engine as `_undo` (a pre-baked revert
   `Correction`): armed when a correction fires, disarmed by the next token. A
   Backspace while armed rewinds the correction; the daemon consumes that Backspace

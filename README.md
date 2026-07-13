@@ -45,6 +45,35 @@ physical kbd → keyd (grabs it, emits "keyd virtual keyboard")
 The correction logic is a set of **pure functions** (token stream → correction),
 fully unit-tested without hardware; the evdev/uinput loop is a thin shell around it.
 
+## Privacy
+
+apostrophed sits in your keystroke path and grabs every key — structurally the same
+shape as a keylogger. That deserves a straight answer, and the code backs every
+claim below (it's all in [`engine.py`](apostrophed/engine.py) and
+[`decode.py`](apostrophed/decode.py)):
+
+- **In memory, one word at a time.** The only thing it retains is the word you're
+  currently typing, in a plain list in RAM (`Engine._buffer`). It's cleared on every
+  word boundary (space, punctuation, digit, Enter), every cursor move (arrows,
+  Home/End, mouse click), any Ctrl/Alt/Meta chord, and after a few seconds idle.
+  Nothing accumulates — there is no history and no full-stream buffer.
+- **Never written to disk.** The buffer is never serialized. The one file apostrophed
+  writes holds exactly `active` or `paused` — no keystrokes — and lives in a
+  RAM-backed runtime dir (`$XDG_RUNTIME_DIR`), not on disk.
+- **No network. At all.** There is no socket, HTTP, or subprocess code anywhere in
+  the package — the entire import list is the Python standard library plus `evdev`
+  and `xkbcommon`. It is structurally incapable of sending your keystrokes anywhere.
+- **Nothing you type is logged in normal use.** The service logs only lifecycle
+  status (device found, rules loaded, layout, paused/resumed). The lone exception is
+  opt-in: the diagnostic `--dry-run` flag and `APOSTROPHED_DEBUG=1` log each
+  *corrected word* (e.g. `didn't`) — not the raw stream — to the journal for
+  troubleshooting. Both are off by default.
+
+In short: it has to see every key to own output ordering (that's what makes it
+race-free), but it only ever holds the current word in memory, matches it against a
+fixed [rule list](data/rules.tsv), and forgets it. The buffer and every reset live
+in one small, pure, unit-tested module — don't take my word for it, read it.
+
 ## Requirements
 
 - Linux with `/dev/uinput` and evdev
