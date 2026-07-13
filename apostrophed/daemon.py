@@ -29,7 +29,7 @@ import time
 import evdev
 from evdev import UInput, ecodes
 
-from . import config
+from . import __version__, config
 from .decode import MODIFIER_KEYS, ModState, decode
 from .engine import Engine
 from .rules import load_rules
@@ -389,6 +389,11 @@ def run(mode: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="apostrophed", description=__doc__)
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"apostrophed {__version__}",
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--passthrough",

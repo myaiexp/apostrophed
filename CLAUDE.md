@@ -90,6 +90,20 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 
 ---
 
+## Versioning
+
+Single source of truth: `__version__` in `apostrophed/__init__.py`, surfaced by
+`apostrophed --version`. SemVer, pre-1.0 (`0.x` — behavior may still shift):
+
+- **MINOR** (`0.x+1.0`) — any user-facing change: a new/changed rule, a new feature,
+  or a behavior change (pre-1.0, breaking changes bump MINOR too, not MAJOR).
+- **PATCH** (`0.x.y+1`) — a bug fix with no new behavior.
+- **No bump** — docs, tests, refactors, or cleanups with no user-visible effect.
+
+Bump in the same commit that ships the change. Tag `vX.Y.Z` to mark a release.
+
+---
+
 ## Doc Management
 
 Follows the global doc convention (`~/.claude/CLAUDE.md` "Per-Project Doc
