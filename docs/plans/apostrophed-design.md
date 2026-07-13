@@ -109,20 +109,40 @@ the exact mechanism.
 
 ## Permissions & lifecycle
 
-Matches the machine's existing pattern (keyd and `g915-gkeys` are both root system
-services with binaries in `/usr/local/bin`):
+**Unprivileged systemd _user_ service** — root is not required and was dropped.
 
-- **Root system service:** unit at `/etc/systemd/system/apostrophed.service`,
-  binary at `/usr/local/bin/apostrophed`, enabled at boot. Root sidesteps
-  `/dev/uinput` + evdev-grab permission faff. This adds **no new trust boundary** —
-  keyd and g915-gkeys already have full keystroke access as root on this box.
-- **Startup ordering (do NOT copy g915-gkeys verbatim):** g915-gkeys has no keyd
-  dependency, but apostrophed grabs `keyd-virtual-keyboard` *by name*, which only
-  exists once keyd is up. The unit must declare `After=keyd.service`, **and** the
-  daemon must wait/retry for the device to appear before grabbing (defensive
-  against ordering gaps and keyd restarts) rather than assuming it's present.
-- **Source repo** at `~/Projects/apostrophed/` with an **install script** that
-  deploys the binary + unit (and any udev rule) and enables the service.
+> _History:_ this originally shipped as a **root system service** (mirroring keyd /
+> `g915-gkeys`) on the assumption that root was needed to "sidestep `/dev/uinput` +
+> evdev-grab permission faff." That assumption was wrong. When we later wanted a
+> Hyprland keybind for the toggle, the root daemon became a problem: Hyprland runs
+> keybinds as the user, and a user cannot signal a root process — so `pkill -USR1`
+> from a keybind fails. Investigating the permissions showed the user already has
+> everything needed, so the daemon was converted to a user service. Root added no
+> capability here, only friction.
+
+Why unprivileged works:
+
+- **evdev grab:** keyd's virtual devices are `root:input 0660`, and the user is in
+  the `input` group → the user can open and `EVIOCGRAB` them. (A grab attempt while
+  the old root instance held the device failed with `EBUSY`, *not* `EACCES` —
+  proving the open/permission path is fine.)
+- **uinput:** `/dev/uinput` carries a logind `uaccess` ACL granting the active-seat
+  user `rw`, so the user can create the emit device. No custom udev rule needed.
+
+Concretely:
+
+- **User service:** unit at `~/.config/systemd/user/apostrophed.service`
+  (`WantedBy=default.target`), launcher at `~/.local/bin/apostrophed`, installed by
+  a **no-sudo** `install.sh`. Runs as the logged-in user; starts with the session.
+- **The toggle is now a plain signal to your own process**, which is what makes the
+  keybind + waybar wiring privilege-free (no sudoers, no polkit, no FIFO).
+- **Startup ordering:** no cross-manager `After=keyd.service` (a user unit can't
+  order against a system unit). keyd is up long before login, and the daemon
+  retries for its virtual device anyway; a login-time uinput-ACL race self-heals
+  via `Restart=on-failure`.
+- **State for indicators:** the daemon publishes `active`/`paused` to
+  `$XDG_RUNTIME_DIR/apostrophed/state` (systemd `RuntimeDirectory`); the waybar
+  helper watches it via `inotify`.
 
 ## Config & toggle
 

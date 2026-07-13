@@ -18,14 +18,21 @@ VARIANT = os.environ.get("APOSTROPHED_VARIANT", "")
 DEVICE_NAME = "keyd virtual keyboard"
 POINTER_NAME = "keyd virtual pointer"
 
-# Source of truth for rules. Installed copy by default; tests set the env to the
-# repo copy.
-RULES_PATH = os.environ.get("APOSTROPHED_RULES", "/usr/local/share/apostrophed/rules.tsv")
+# Source of truth for rules. Installed under the user's data dir by default; tests
+# set the env to the repo copy.
+_DATA_HOME = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+RULES_PATH = os.environ.get("APOSTROPHED_RULES", f"{_DATA_HOME}/apostrophed/rules.tsv")
 
 # Reset the word buffer after this many seconds of keyboard silence — a backstop
 # for cursor moves we can't observe (e.g. a touchpad tap, which isn't the keyd
 # pointer we watch).
 IDLE_RESET_SECONDS = float(os.environ.get("APOSTROPHED_IDLE_RESET", "4.0"))
+
+# Where the daemon publishes its enabled/paused state ("active"|"paused") for
+# external indicators to read (e.g. a waybar module). The user unit provides
+# $XDG_RUNTIME_DIR/apostrophed via RuntimeDirectory; tests point this at a tmp file.
+_RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/run")
+STATE_PATH = os.environ.get("APOSTROPHED_STATE", f"{_RUNTIME_DIR}/apostrophed/state")
 
 # Escape hatch: set to an int evdev keycode to override xkbcommon's apostrophe
 # derivation. `None` means derive from the layout (the correct default).

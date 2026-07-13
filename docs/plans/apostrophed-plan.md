@@ -1,6 +1,13 @@
 # apostrophed Implementation Plan
 
-**Goal:** A race-free root evdev daemon that fixes 44 "safe" contractions + `i`→`I`
+> **Historical (executed) plan.** It describes the original **root system service**
+> install. That was later dropped: the daemon now runs as an unprivileged systemd
+> **user** service (`~/.local` + `~/.config/systemd/user`, no sudo). References
+> below to root / `/usr/local` / `/etc/systemd` are superseded — see
+> [`apostrophed-design.md`](apostrophed-design.md) "Permissions & lifecycle" for the
+> current model and why root was unnecessary.
+
+**Goal:** A race-free evdev daemon that fixes 44 "safe" contractions + `i`→`I`
 as you type on Wayland/Hyprland, by grabbing the post-keyd keyboard stream and
 re-emitting corrections in deterministic order.
 

@@ -1,9 +1,9 @@
 # apostrophed
 
-> A race-free root evdev daemon that fixes missing apostrophes in contractions
+> A race-free evdev daemon that fixes missing apostrophes in contractions
 > (`didnt` → `didn't`) and capitalizes the standalone pronoun `i` → `I` as you
 > type — on Wayland, by **owning the keystroke stream** instead of injecting like a
-> text expander.
+> text expander. Runs unprivileged as a systemd user service.
 
 ## Why not a text expander?
 
@@ -51,42 +51,76 @@ fully unit-tested without hardware; the evdev/uinput loop is a thin shell around
 - A Wayland compositor (developed on Hyprland)
 - Python 3.11+, [`python-evdev`](https://python-evdev.readthedocs.io/),
   [`python-xkbcommon`](https://github.com/sde1000/python-xkbcommon)
-- Runs as **root** (for evdev grab + uinput), as a systemd system service
+- **No root.** Runs as your user via a systemd **user** service. Needs only
+  membership in the `input` group (to grab keyd's virtual devices) and the logind
+  `uaccess` ACL on `/dev/uinput` (present in a normal graphical session).
 
 ## Install
 
 ```sh
 git clone https://github.com/myaiexp/apostrophed
 cd apostrophed
-sudo ./install.sh
+./install.sh          # NOT sudo — this is a user service
 ```
 
-`install.sh` is idempotent: it deploys the package to `/usr/local/lib`, rules to
-`/usr/local/share`, a launcher to `/usr/local/bin`, and a `After=keyd.service` unit
-to `/etc/systemd/system`, then enables and starts it. Check it:
+`install.sh` is idempotent and fully user-space: it deploys the package to
+`~/.local/lib`, rules to `~/.local/share`, launchers to `~/.local/bin`, and a user
+unit to `~/.config/systemd/user`, then enables and starts it. Check it:
 
 ```sh
-systemctl is-active apostrophed
-journalctl -u apostrophed -f
+systemctl --user is-active apostrophed
+journalctl --user -u apostrophed -f
 ```
+
+> If you're not in the `input` group yet: `sudo usermod -aG input $USER`, then log
+> out and back in. That is the only privileged step, and it's a one-time account
+> change — the daemon itself never runs as root.
 
 ## Usage
 
 Once installed it just runs. To pause/resume (paused = pure passthrough):
 
 ```sh
-pkill -USR1 apostrophed
+pkill -USR1 apostrophed   # works as your user — no sudo, since the daemon is yours
 ```
 
-Run modes (for testing, before installing — point it at the repo rules):
+Run modes (for testing, before installing — point it at the repo rules; stop the
+service first so the grab is free):
 
 ```sh
 # grab-chain spike: forward only, no correction
-sudo APOSTROPHED_RULES=data/rules.tsv python -m apostrophed.daemon --passthrough
+APOSTROPHED_RULES=data/rules.tsv python -m apostrophed.daemon --passthrough
 
 # dry-run: log intended corrections, emit nothing
-sudo APOSTROPHED_RULES=data/rules.tsv python -m apostrophed.daemon --dry-run
+APOSTROPHED_RULES=data/rules.tsv python -m apostrophed.daemon --dry-run
 ```
+
+### Desktop integration (optional)
+
+Because the toggle is a plain signal to *your* process, wiring it up needs no
+privilege bridge.
+
+**Hyprland keybind** — in `~/.config/hypr/bindings.conf`:
+
+```
+bindd = ALT SHIFT, A, Toggle apostrophed, exec, pkill -USR1 apostrophed
+```
+
+**Waybar status indicator** — the daemon publishes its state to
+`$XDG_RUNTIME_DIR/apostrophed/state`, and the installed `apostrophed-waybar` helper
+turns that into a live module (event-driven via `inotify`, so it needs no polling
+and can't race the toggle). Add to `~/.config/waybar/config.jsonc`:
+
+```jsonc
+"custom/apostrophed": {
+  "exec": "~/.local/bin/apostrophed-waybar",
+  "return-type": "json",
+  "on-click": "pkill -USR1 apostrophed"
+}
+```
+
+and place `"custom/apostrophed"` in one of the `modules-*` arrays. Style the
+`.active` / `.paused` / `.off` classes in `style.css` to taste.
 
 ### Configuration (environment variables)
 
@@ -94,8 +128,9 @@ sudo APOSTROPHED_RULES=data/rules.tsv python -m apostrophed.daemon --dry-run
 | --- | --- | --- |
 | `APOSTROPHED_LAYOUT` | `fi` | XKB layout used to derive emit keycodes |
 | `APOSTROPHED_VARIANT` | `""` | XKB variant |
-| `APOSTROPHED_RULES` | `/usr/local/share/apostrophed/rules.tsv` | rule file path |
+| `APOSTROPHED_RULES` | `~/.local/share/apostrophed/rules.tsv` | rule file path |
 | `APOSTROPHED_IDLE_RESET` | `4.0` | seconds of silence before the word buffer resets |
+| `APOSTROPHED_STATE` | `$XDG_RUNTIME_DIR/apostrophed/state` | enabled/paused state file for indicators |
 | `APOSTROPHED_APOSTROPHE_KEYCODE` | *(derived)* | escape hatch: force an evdev keycode for `'` |
 | `APOSTROPHED_DEBUG` | *(off)* | log each applied correction |
 
@@ -124,8 +159,7 @@ without hardware.
 
 - Built and tested for a **keyd + Hyprland + `fi`** setup; other layouts work via
   `APOSTROPHED_LAYOUT`, other virtual keyboards via `DEVICE_NAME`.
-- Known edge cases are tracked in [`docs/ideas.md`](docs/ideas.md) (e.g. holding
-  Shift *continuously across* a corrected word).
+- Remaining known edge cases are tracked in [`docs/ideas.md`](docs/ideas.md).
 
 Design rationale, data flow, and alternatives considered:
 [`docs/plans/apostrophed-design.md`](docs/plans/apostrophed-design.md).

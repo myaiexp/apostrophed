@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Installed launcher: puts the deployed package dir on sys.path, runs the daemon.
 
-The package is installed to /usr/local/lib/apostrophed/; adding /usr/local/lib to
-sys.path makes `import apostrophed` resolve without a pip install.
+install.sh deploys the package to ``<prefix>/lib/apostrophed/`` and this launcher
+to ``<prefix>/bin/apostrophed`` (prefix = ``~/.local`` by default). We resolve the
+lib dir *relative to this file* so the install is relocatable — no hardcoded path.
 """
 
+import os
 import sys
 
-sys.path.insert(0, "/usr/local/lib")
+_PREFIX = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # <prefix>
+sys.path.insert(0, os.path.join(_PREFIX, "lib"))
 
 from apostrophed.daemon import main  # noqa: E402
 

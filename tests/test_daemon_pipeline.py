@@ -198,6 +198,21 @@ def final_shift_down(log):
     return bool(down)
 
 
+def test_write_state_publishes_active_and_paused(tmp_path, monkeypatch):
+    from apostrophed import config
+
+    state = tmp_path / "state"
+    monkeypatch.setattr(config, "STATE_PATH", str(state))
+    d, _ui, _km = make_daemon()
+
+    d._write_state()
+    assert state.read_text() == "active\n"
+
+    d.paused = True
+    d._write_state()
+    assert state.read_text() == "paused\n"
+
+
 @pytest.mark.parametrize("shift_key", [KEY_LEFTSHIFT, KEY_RIGHTSHIFT])
 def test_shift_held_across_correction(shift_key):
     # Holding Shift through a whole word makes an all-caps correction fire while

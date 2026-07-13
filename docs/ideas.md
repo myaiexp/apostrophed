@@ -8,11 +8,6 @@ Future work, tech debt, and deferred capabilities. WHAT, not HOW.
   correction restores the original typed word (so a rare unwanted fix is one key
   to revert). Low value with the zero-false-positive safe set, so deferred — but
   cheap to add on top of the buffer we already maintain.
-- **Hyprland keybind for the toggle.** Bind a key to `pkill -USR1 apostrophed` so
-  pause/resume is one chord instead of a terminal command. Trivial once the signal
-  handler exists.
-- **Status indicator.** Optional waybar/mako signal of enabled vs paused state, if
-  the toggle ever gets used enough to want visible feedback.
 - **Grow the rule set.** The rules are a data file — more contractions or a few
   personal apostrophe/typo fixes can be added without code changes. Keep to the
   "safe form" rule (apostrophe-less spelling must not be a real word) unless
@@ -21,6 +16,13 @@ Future work, tech debt, and deferred capabilities. WHAT, not HOW.
   replacements ever appears, the race-free evdev core could grow into a small
   espanso replacement. Explicitly out of scope for now — keeping the hot-path code
   small and provably correct is the priority.
+
+## 2026-07-13 — shipped (removed from this list)
+
+- **Hyprland keybind for the toggle** — `Alt+Shift+A` → `pkill -USR1 apostrophed`.
+- **Status indicator** — waybar module reading the daemon's state file, inotify-
+  driven. Both landed once the daemon moved off root to a user service (a user can
+  signal its own process, so no privilege bridge was needed).
 
 ## 2026-07-13 — known limitations (post-implementation)
 

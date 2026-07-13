@@ -1,15 +1,20 @@
 [Unit]
 Description=apostrophed contraction fixer
-# keyd must be up first: we grab its `keyd virtual keyboard` by name. The daemon
-# also retries for the device, but ordering avoids a noisy first start.
-After=keyd.service systemd-udevd.service
-Wants=keyd.service
+# A systemd *user* service: the daemon needs only input-group access to keyd's
+# virtual devices and the logind uaccess ACL on /dev/uinput — both present in the
+# user's graphical session, so it runs unprivileged as the logged-in user.
+# keyd (a system service) is already up by login, and the daemon retries for its
+# virtual device anyway, so no cross-manager ordering is needed here.
 
 [Service]
-ExecStart=/usr/local/bin/apostrophed
+ExecStart=%h/.local/bin/apostrophed
 # Device vanished (keyd restart) exits non-zero -> we re-grab the fresh device.
+# Also self-heals a login-time race where the uinput ACL isn't granted yet.
 Restart=on-failure
 RestartSec=2
+# $XDG_RUNTIME_DIR/apostrophed (i.e. /run/user/UID/apostrophed) for the
+# enabled/paused state file the daemon publishes for indicators (e.g. waybar).
+RuntimeDirectory=apostrophed
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

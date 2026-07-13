@@ -239,6 +239,17 @@ class Daemon:
         self._forward(event)
         self.ui.syn()  # type: ignore[union-attr]
 
+    def _write_state(self) -> None:
+        """Publish "active"/"paused" to the state file so external indicators
+        (e.g. a waybar module) can reflect the toggle. Best-effort: a missing
+        runtime dir (not installed as the systemd service) just means no
+        indicator — never a reason to disrupt input."""
+        try:
+            with open(config.STATE_PATH, "w") as fh:
+                fh.write("paused\n" if self.paused else "active\n")
+        except OSError as exc:
+            log(f"could not write state file {config.STATE_PATH!r}: {exc}")
+
     def _handle_pointer(self) -> None:
         try:
             for event in self.pointer.read():  # type: ignore[union-attr]
@@ -262,6 +273,7 @@ class Daemon:
 
         def on_usr1(_sig, _frame):
             self.paused = not self.paused
+            self._write_state()
             log(f"{'paused (passthrough)' if self.paused else 'resumed'}")
 
         signal.signal(signal.SIGTERM, on_term)
@@ -290,6 +302,7 @@ class Daemon:
 
             self.keymap = KeyMap(config.LAYOUT, config.VARIANT)
             log(f"keymap ready for layout {config.LAYOUT!r}")
+        self._write_state()  # publish initial "active" for indicators
         log(f"running in {self.mode} mode")
 
     def run_loop(self) -> None:

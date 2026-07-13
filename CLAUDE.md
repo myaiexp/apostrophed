@@ -1,13 +1,18 @@
 # apostrophed
 
-> A root evdev daemon that fixes missing apostrophes in contractions (`didnt` →
-> `didn't`) and capitalizes standalone `i` → `I` as you type, on Wayland/Hyprland
-> — race-free, by owning the keystroke stream instead of injecting like espanso.
+> An unprivileged evdev daemon that fixes missing apostrophes in contractions
+> (`didnt` → `didn't`) and capitalizes standalone `i` → `I` as you type, on
+> Wayland/Hyprland — race-free, by owning the keystroke stream instead of injecting
+> like espanso.
 
 ## Stack
 
-- **Language**: Python (`python-evdev`), mirroring the existing `/usr/local/bin/g915-gkeys` daemon pattern on this machine.
-- **Runtime**: root systemd system service, binary in `/usr/local/bin/`.
+- **Language**: Python (`python-evdev`), mirroring the `g915-gkeys` daemon's evdev
+  approach (but unprivileged — root turned out to be unnecessary, see below).
+- **Runtime**: systemd **user** service, installed under `~/.local`. Runs as the
+  logged-in user via `input`-group access to keyd's virtual devices + the logind
+  `uaccess` ACL on `/dev/uinput`. **No root** (the toggle is a plain signal to your
+  own process — that's what makes the keybind/waybar wiring privilege-free).
 - **Platform**: Wayland / Hyprland, keyboard layout `fi`.
 
 ## Project Structure
@@ -28,8 +33,9 @@
 ├── data/rules.tsv                  # 45 rules (source of truth)
 ├── tests/                          # pytest: rules, engine, decode, keymap, pipeline
 ├── bin/apostrophed                 # installed launcher (sys.path shim -> main)
-├── apostrophed.service             # systemd unit (After=keyd.service)
-├── install.sh                      # deploys lib + data + unit + launcher; enables svc
+├── bin/apostrophed-waybar          # waybar module: reads state file, inotify-driven
+├── apostrophed.service             # systemd USER unit (WantedBy=default.target)
+├── install.sh                      # user-space deploy (no sudo); systemctl --user
 └── uninstall-espanso.sh            # teardown of the espanso experiment
 ```
 
@@ -53,6 +59,10 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 - **Layout derived, not hardcoded.** The apostrophe keystroke is resolved from the
   active XKB keymap at startup (espanso's bug was assuming US → produced `ä`).
 - **Toggle:** `pkill -USR1 apostrophed` pauses/resumes (paused = passthrough).
+  Works as your user (the daemon is yours), so the Hyprland keybind (`Alt+Shift+A`)
+  and waybar click need no sudo. On each toggle the daemon writes `active`/`paused`
+  to `$XDG_RUNTIME_DIR/apostrophed/state`; `bin/apostrophed-waybar` watches that file
+  via `inotify` (event-driven, race-free) to drive the status module.
 
 ## Pointers
 

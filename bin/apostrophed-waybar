@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Waybar custom module for apostrophed: reflects the daemon's enabled/paused
+# state, event-driven via inotify on the state file the daemon publishes — no
+# polling while the daemon is up, and no signal coordination (so it can't race
+# the toggle). Emits one JSON line on start and on every state change.
+#
+# Wire into ~/.config/waybar/config.jsonc:
+#   "custom/apostrophed": {
+#     "exec": "/usr/local/bin/apostrophed-waybar",
+#     "return-type": "json",
+#     "on-click": "pkill -USR1 apostrophed"
+#   }
+# and place "custom/apostrophed" in one of the modules-* arrays. Style via the
+# .active / .paused / .off classes (see README).
+set -u
+
+STATE_FILE="${APOSTROPHED_STATE:-${XDG_RUNTIME_DIR:-/run}/apostrophed/state}"
+ICON="󰓆"  # nf-md-spellcheck
+
+emit() {
+    case "$(cat "$STATE_FILE" 2>/dev/null || true)" in
+        active) printf '{"text":"%s","class":"active","tooltip":"apostrophed: correcting  (Alt+Shift+A to pause)"}\n' "$ICON" ;;
+        paused) printf '{"text":"%s","class":"paused","tooltip":"apostrophed: paused  (Alt+Shift+A to resume)"}\n' "$ICON" ;;
+        *)      printf '{"text":"%s","class":"off","tooltip":"apostrophed: not running"}\n' "$ICON" ;;
+    esac
+}
+
+# Emit current state, then block until it changes and repeat. When the file is
+# absent (daemon stopped -> RuntimeDirectory gone) inotify has nothing to watch,
+# so fall back to a slow poll until it reappears.
+while true; do
+    emit
+    if [[ -e "$STATE_FILE" ]]; then
+        inotifywait -qq -e close_write,delete_self,move_self "$STATE_FILE" 2>/dev/null || sleep 2
+    else
+        sleep 2
+    fi
+done
