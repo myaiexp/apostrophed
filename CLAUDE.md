@@ -65,5 +65,9 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 ## Doc Management
 
 Follows the global doc convention (`~/.claude/CLAUDE.md` "Per-Project Doc
-Convention"). Not a web deploy — no VPS remotes; deployment is the local
-`install.sh` + systemd unit.
+Convention"). Not a web deploy — deployment is the local `install.sh` + systemd
+unit.
+
+**Public repo:** https://github.com/myaiexp/apostrophed (MIT). `README.md` is the
+user-facing entry point; this `CLAUDE.md` and `docs/` are dev-internal but public.
+No sensitive content — keep it that way (no machine secrets, VPS paths, creds).
