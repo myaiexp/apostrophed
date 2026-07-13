@@ -31,3 +31,7 @@ IDLE_RESET_SECONDS = float(os.environ.get("APOSTROPHED_IDLE_RESET", "4.0"))
 # derivation. `None` means derive from the layout (the correct default).
 _apos = os.environ.get("APOSTROPHED_APOSTROPHE_KEYCODE")
 APOSTROPHE_KEYCODE: int | None = int(_apos) if _apos else None
+
+# When set, log each applied correction in real mode (diagnostic; off by default
+# to keep the journal quiet).
+DEBUG = bool(os.environ.get("APOSTROPHED_DEBUG"))

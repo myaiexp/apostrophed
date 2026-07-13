@@ -38,6 +38,9 @@ _SHORTCUT_KEYS = frozenset(
     }
 )
 _MODIFIER_KEYS = _SHIFT_KEYS | _SHORTCUT_KEYS | {ecodes.KEY_CAPSLOCK}
+# Public: the daemon skips these when releasing held keys before a rewrite (their
+# down-state is meaningful, not a stuck letter to clear).
+MODIFIER_KEYS = _MODIFIER_KEYS
 
 # Keys that produce a visible non-letter and thus END a word.
 _PUNCTUATION = {

@@ -71,9 +71,11 @@ def type_word(d, word, boundary=KEY_SPACE, caps=False):
         if ch.isupper():
             _ev(d, KEY_LEFTSHIFT, 1)
             _ev(d, key_for_char(ch), 1)
+            _ev(d, key_for_char(ch), 0)
             _ev(d, KEY_LEFTSHIFT, 0)
         else:
             _ev(d, key_for_char(ch), 1)
+            _ev(d, key_for_char(ch), 0)
     _ev(d, boundary, 1)
 
 
@@ -121,6 +123,33 @@ def test_capslock_uppercases_without_shift():
     assert emitted_char_keycodes(log) == [km.stroke(c).keycode for c in "WOULDN'T"]
     # ...but emitted WITHOUT Shift, because the device's CapsLock is locked.
     assert count_emit_down(log, KEY_LEFTSHIFT) == 0
+
+
+def test_rollover_releases_held_letter_before_rewrite():
+    # Fast typing: space is pressed before the final 't' of "dont" is released, so
+    # 't' is still held when the correction fires. The daemon must release it
+    # before the rewrite, else the rewrite's own 't'-press is a no-op downstream
+    # and the letter is lost (the reported "last letter dropped" bug).
+    d, ui, km = make_daemon()
+    for ch in "don":
+        _ev(d, key_for_char(ch), 1)
+        _ev(d, key_for_char(ch), 0)
+    _ev(d, ecodes.KEY_T, 1)  # 't' pressed and HELD (no release)
+    _ev(d, KEY_SPACE, 1)  # boundary fires while 't' is down
+    log = ui.log
+
+    first_bksp = next(
+        i for i, (k, t, c, v) in enumerate(log)
+        if k == "EMIT" and t == EV_KEY and c == KEY_BACKSPACE and v == 1
+    )
+    # a KEY_T release is injected BEFORE the backspaces (the held-key release)
+    held_release = [
+        i for i, (k, t, c, v) in enumerate(log)
+        if k == "EMIT" and t == EV_KEY and c == ecodes.KEY_T and v == 0 and i < first_bksp
+    ]
+    assert held_release, "held 't' was not released before the rewrite"
+    # and the rewrite still emits every char including the final 't'
+    assert emitted_char_keycodes(log) == [km.stroke(c).keycode for c in "don't"]
 
 
 def test_non_trigger_passes_through_untouched():

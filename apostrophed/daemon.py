@@ -30,7 +30,7 @@ import evdev
 from evdev import UInput, ecodes
 
 from . import config
-from .decode import ModState, decode
+from .decode import MODIFIER_KEYS, ModState, decode
 from .engine import Engine
 from .rules import load_rules
 from .tokens import Correction, Reset
@@ -99,17 +99,28 @@ class Daemon:
         self.kbd: evdev.InputDevice | None = None
         self.pointer: evdev.InputDevice | None = None
         self._wake_r = -1
+        # Keycodes currently held down on the OUTPUT side (mirrors what the app
+        # sees via forwarded events). Used to release fast-typing rollover keys
+        # before a rewrite so a re-emitted press isn't a no-op on an already-down
+        # key — the "last letter swallowed when typing fast" bug.
+        self._held: set[int] = set()
 
     # --- emission helpers (full mode only) -----------------------------------
 
     def _tap(self, code: int, shift: bool = False, altgr: bool = False) -> None:
         ui = self.ui
         assert ui is not None
+        # Press frame: modifiers + key down, committed with a SYN.
         if shift:
             ui.write(ecodes.EV_KEY, ecodes.KEY_LEFTSHIFT, 1)
         if altgr:
             ui.write(ecodes.EV_KEY, ecodes.KEY_RIGHTALT, 1)
         ui.write(ecodes.EV_KEY, code, 1)
+        ui.syn()
+        # Release frame: key + modifiers up, committed separately. Splitting press
+        # and release into distinct SYN reports mirrors a real keyboard; a
+        # same-frame down+up is non-physical and libinput can drop the transition
+        # (notably the last char right before the forwarded boundary key).
         ui.write(ecodes.EV_KEY, code, 0)
         if altgr:
             ui.write(ecodes.EV_KEY, ecodes.KEY_RIGHTALT, 0)
@@ -131,7 +142,23 @@ class Daemon:
             self._tap(ks.keycode, shift=shift, altgr=ks.altgr)
 
     def _forward(self, event) -> None:
+        # Mirror the output-side key state so we know what's physically held.
+        if event.type == ecodes.EV_KEY:
+            if event.value == 1:
+                self._held.add(event.code)
+            elif event.value == 0:
+                self._held.discard(event.code)
         self.ui.write_event(event)  # type: ignore[union-attr]
+
+    def _release_held(self, keep: int) -> None:
+        """Release every held non-modifier key (except ``keep``) so the imminent
+        rewrite's key-downs aren't swallowed as no-ops on already-down keys."""
+        for code in list(self._held):
+            if code == keep or code in MODIFIER_KEYS:
+                continue
+            self.ui.write(ecodes.EV_KEY, code, 0)  # type: ignore[union-attr]
+            self._held.discard(code)
+        self.ui.syn()  # type: ignore[union-attr]
 
     # --- per-event dispatch ---------------------------------------------------
 
@@ -161,8 +188,16 @@ class Daemon:
             log(f"[dry-run] correct: -{corr.delete_count} +{corr.text!r}")
             self._forward(event)
             return
+        if config.DEBUG:
+            log(f"correct: -{corr.delete_count} +{corr.text!r}")
+        # Release any rollover keys still held from fast typing (else the rewrite's
+        # re-emitted press of that same letter is a no-op), then inject and finally
+        # forward the held boundary in its own frame. `keep=event.code` guards the
+        # boundary key, which we forward ourselves below.
+        self._release_held(keep=event.code)
         self._apply_correction(corr)
         self._forward(event)
+        self.ui.syn()  # type: ignore[union-attr]
 
     def _handle_pointer(self) -> None:
         try:
