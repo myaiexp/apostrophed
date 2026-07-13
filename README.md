@@ -1,5 +1,9 @@
 # apostrophed
 
+[![tests](https://github.com/myaiexp/apostrophed/actions/workflows/test.yml/badge.svg)](https://github.com/myaiexp/apostrophed/actions/workflows/test.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+
 > A race-free evdev daemon that fixes missing apostrophes in contractions
 > (`didnt` → `didn't`) and capitalizes the standalone pronoun `i` → `I` as you
 > type — on Wayland, by **owning the keystroke stream** instead of injecting like a
@@ -66,7 +70,7 @@ claim below (it's all in [`engine.py`](apostrophed/engine.py) and
 - **Nothing you type is logged in normal use.** The service logs only lifecycle
   status (device found, rules loaded, layout, paused/resumed). The lone exception is
   opt-in: the diagnostic `--dry-run` flag and `APOSTROPHED_DEBUG=1` log each
-  *corrected word* (e.g. `didn't`) — not the raw stream — to the journal for
+  _corrected word_ (e.g. `didn't`) — not the raw stream — to the journal for
   troubleshooting. Both are off by default.
 
 In short: it has to see every key to own output ordering (that's what makes it
@@ -179,7 +183,7 @@ and place `"custom/apostrophed"` in one of the `modules-*` arrays. Style the
 | `APOSTROPHED_IDLE_RESET`         | `4.0`                                   | seconds of silence before the word buffer resets                               |
 | `APOSTROPHED_STATE`              | `$XDG_RUNTIME_DIR/apostrophed/state`    | enabled/paused state file for indicators                                       |
 | `APOSTROPHED_APOSTROPHE_KEYCODE` | _(derived)_                             | escape hatch: force an evdev keycode for `'`                                   |
-| `APOSTROPHED_DEBUG`              | _(off)_                                 | log each applied correction                                                    |
+| `APOSTROPHED_DEBUG`              | _(off)_                                 | log each applied correction (set to enable; `0`/`false`/`off` stay off)        |
 
 ## Rules
 
@@ -201,6 +205,17 @@ The suite covers rule loading, the rewrite engine (every rule + all case pattern
 event decoding, layout-aware keymap derivation, and a headless end-to-end pipeline
 test that asserts the anti-reorder guarantee and the fast-typing rollover fix — all
 without hardware.
+
+## Contributing
+
+Issues and PRs welcome. The easiest wins are new **safe** contractions — add a
+`<trigger>\t<replacement>` line to [`data/rules.tsv`](data/rules.tsv) (only forms
+whose apostrophe-less spelling isn't itself a real word) plus a case in
+`tests/test_engine.py`. For code, keep the pure core pure: the rewrite logic
+(`engine.py`, `decode.py`, `rules.py`) has no hardware imports and must stay green
+under `python -m pytest` — CI runs it on Python 3.11–3.13. The evdev/uinput loop
+stays a thin shell around it. Architecture and rationale live in
+[`docs/plans/apostrophed-design.md`](docs/plans/apostrophed-design.md).
 
 ## Caveats
 
