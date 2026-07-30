@@ -1,7 +1,7 @@
 # apostrophed
 
 [![tests](https://github.com/myaiexp/apostrophed/actions/workflows/test.yml/badge.svg)](https://github.com/myaiexp/apostrophed/actions/workflows/test.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license: 0BSD](https://img.shields.io/badge/license-0BSD-blue.svg)](LICENSE)
 ![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
 > A race-free evdev daemon that fixes missing apostrophes in contractions
@@ -229,4 +229,4 @@ Design rationale, data flow, and alternatives considered:
 
 ## License
 
-[MIT](LICENSE)
+[0BSD](LICENSE)
