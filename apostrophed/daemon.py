@@ -92,6 +92,16 @@ def _device_present(name: str) -> bool:
     return False
 
 
+def _drain(dev: evdev.InputDevice) -> list:
+    """Return every event queued on ``dev`` without blocking."""
+    events: list = []
+    while True:
+        try:
+            events.extend(dev.read())
+        except BlockingIOError:
+            return events
+
+
 def _open_pointer(name: str) -> evdev.InputDevice | None:
     """Open the keyd pointer read-only (never grabbed) for click-reset. Optional:
     a missing pointer just means the idle timer is the only buffer-reset backstop."""
@@ -215,19 +225,48 @@ class Daemon:
         if codes:
             self.ui.syn()  # type: ignore[union-attr]
 
-    def _release_all_keys(self) -> None:
-        """Blanket key-release on startup: emit an up for every key our device can
-        emit, clearing anything the compositor may still think is held. A key-up
-        lost during a grab handoff (this service restarting mid-keystroke) otherwise
-        leaves a key 'stuck down' until a manual stop — an up for an un-pressed key
-        is a harmless no-op, so releasing them all is a safe reset. Ups only: a lone
-        up can't untoggle a lock (e.g. CapsLock), while a down would flip it, so
-        locks are left to the compositor's own state."""
-        ui, kbd = self.ui, self.kbd
-        assert ui is not None and kbd is not None
-        for code in kbd.capabilities().get(ecodes.EV_KEY, []):
-            ui.write(ecodes.EV_KEY, code, 0)
-        ui.syn()
+    def _grab_when_idle(self) -> None:
+        """Take the grab only at a moment the compositor holds no upstream key.
+
+        A key pressed before the grab and released after it is stranded: the press
+        reached the compositor on the upstream device, the release reaches only us,
+        and forwarding it on our own device can't release a key held on a different
+        one. Nothing repairs that afterwards — the kernel drops a key-up for a key
+        it already considers up, so neither re-sending the release on the upstream
+        node nor blanket-releasing on ours reaches the compositor. Prevention is
+        the only fix: wait for idle, then grab.
+
+        ``mirror`` is a second reader on the upstream node that is never grabbed:
+        until the grab it receives exactly what the compositor receives, after it
+        nothing. So a key event in its queue after the grab landed between the idle
+        check and the grab — the compositor may hold it, and our own queue has a
+        copy the run loop would forward a second time — so release and retry.
+
+        Residual: events reaching us in the microseconds between a rejected grab
+        and its release are lost to the compositor. Pressing a stranded key once
+        releases it."""
+        kbd = self.kbd
+        assert kbd is not None
+        mirror = evdev.InputDevice(kbd.path)
+        waiting = False
+        try:
+            while not self.stop:
+                # Mirror first: an event between the two drains then shows up in
+                # the mirror (-> retry), never only in our queue (-> forwarded twice).
+                _drain(mirror)
+                _drain(kbd)
+                if kbd.active_keys():
+                    if not waiting:
+                        log("waiting for held keys to be released before grabbing")
+                        waiting = True
+                    time.sleep(0.02)
+                    continue
+                kbd.grab()
+                if not any(ev.type == ecodes.EV_KEY for ev in _drain(mirror)):
+                    return
+                kbd.ungrab()
+        finally:
+            mirror.close()
 
     # --- per-event dispatch ---------------------------------------------------
 
@@ -323,9 +362,13 @@ class Daemon:
         self._install_signals()
         self.kbd = find_device(config.DEVICE_NAME)
         log(f"found {config.DEVICE_NAME!r} at {self.kbd.path}")
-        self.kbd.grab()
+        # Output device before the grab: python-evdev spends ~2s retrying to open
+        # the new node (unreadable to us without the `input` group) before giving
+        # up harmlessly. Done after the grab, that would hold every keystroke.
         self.ui = UInput.from_device(self.kbd, name="apostrophed")
-        self._release_all_keys()  # clear any key stranded by a prior grab handoff
+        self._grab_when_idle()
+        if self.stop:
+            return
         log("grabbed keyboard; emitting via uinput 'apostrophed'")
 
         if self.mode != "passthrough":

@@ -50,15 +50,34 @@ dies, and Hyprland falls back to reading `keyd-virtual-keyboard` directly. So a
 crash means "contractions stop being fixed," never "keyboard dead." (A *hang*
 could stall input, so per-event processing must stay trivial and non-blocking.)
 
-**Grab-handoff stranded keys:** the flip side of owning output ordering is that a
-restart *mid-keystroke* can drop a key-up in the ungrab→regrab gap, leaving a key
-stuck "down" in the compositor (observed once as a held space in-game, plus an
-inverted `i`→`I` correction from a stranded modifier — until the daemon is
-stopped). This is **not** a dispatch-logic bug: ~210k fuzzed rollover sequences
-confirm balanced input never strands a key, so the imbalance is the lost handoff
-event. Mitigation: on startup the daemon blanket-releases every key it can emit
-(`_release_all_keys`, ups only so a lock like CapsLock isn't flipped), so a
-stranded key self-heals on the next (re)start instead of needing a manual stop.
+**Grab-handoff stranded keys:** a key held while the daemon takes `EVIOCGRAB`
+is stranded "down" in the compositor: its press reached the compositor on keyd's
+device, but its release goes only to the grabber, and our forwarded release lands
+on *our* device, where that key was never down. Symptoms: a held space
+auto-repeating (runs of spaces, and real presses of space swallowed as no-ops), the
+cursor flickering (Hyprland hides it on each repeat), an inverted `i`→`I` from a
+stranded modifier. It persists until the compositor sees the key go down and up on
+keyd's device again, so a restart mid-keystroke (an install, a reinstall) triggers it.
+Stopping mid-keystroke is clean: after the ungrab the release reaches the
+compositor on keyd's device, and removing our uinput device releases its keys.
+
+No after-the-fact repair exists: the kernel input core drops a key-up for a key it
+already considers up, so neither re-sending the release on keyd's node nor
+blanket-releasing on ours reaches the compositor. (An earlier blanket release on
+startup was a no-op for exactly this reason.) Prevention is the fix:
+`_grab_when_idle` waits until `EVIOCGKEY` reports no key held, then grabs. A
+second, never-grabbed reader on keyd's node ("mirror") receives exactly what the
+compositor receives until the grab and nothing after. So a key event in the
+mirror after the grab landed between the check and the grab, and the grab is
+released and retried. The same ordering keeps the daemon from re-forwarding
+pre-grab events from its own queue. Residual risk: events in the microseconds
+between a rejected grab and its release are lost to the compositor. Pressing a
+stranded key once releases it.
+
+This is **not** a dispatch-logic bug: ~210k fuzzed rollover sequences confirm
+balanced input never strands a key. Reproduced live against keyd's device (a held
+`KEY_RO` across a daemon start stays held in a reader standing in for libinput, and
+the fix clears it).
 
 ## Event pipeline / data flow
 

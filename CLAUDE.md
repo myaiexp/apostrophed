@@ -57,13 +57,13 @@ Run tests: `python -m pytest -q` from the repo root (pyproject sets pythonpath).
 - **Safe-crash.** `EVIOCGRAB` releases on process death → Hyprland falls back to
   reading `keyd-virtual-keyboard`. A crash stops corrections, never the keyboard.
   Keep per-event processing trivial and non-blocking (a hang *would* stall input).
-- **Startup key-reset.** A grab handoff (the service restarting *mid-keystroke*) can
-  drop a key-up, stranding a key "down" in the compositor (seen once as a stuck
-  space + an inverted `i` from a stranded modifier). `Daemon._release_all_keys`
-  blanket-emits an up for every key on startup (ups only — a down would flip a lock
-  like CapsLock), so any stranded key self-heals on restart. The dispatch logic
-  itself never strands a key from balanced input (verified by ~210k fuzzed
-  rollover sequences); the imbalance only comes from the handoff.
+- **Grab only when idle.** A key held across the grab is stranded "down" in the
+  compositor (its press arrived on keyd's device, its release only reaches us), and
+  nothing repairs it afterwards — the kernel drops key-ups for keys it already
+  considers up. So `Daemon._grab_when_idle` waits until no key is held, and a
+  never-grabbed mirror reader proves nothing landed between that check and the
+  grab. The dispatch logic itself never strands a key from balanced input (~210k
+  fuzzed rollover sequences). Details: design doc, "Grab-handoff stranded keys".
 - **Rewrite logic is pure functions** (event sequence → emitted events), unit-
   tested with synthetic keystrokes. The evdev loop is a thin shell around it.
 - **Privacy is a verified invariant** (README **Privacy** section is a public trust
