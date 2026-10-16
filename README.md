@@ -87,9 +87,9 @@ in one small, pure, unit-tested module — don't take my word for it, read it.
 - A Wayland compositor (developed on Hyprland)
 - Python 3.11+, [`python-evdev`](https://python-evdev.readthedocs.io/),
   [`python-xkbcommon`](https://github.com/sde1000/python-xkbcommon)
-- **No root.** Runs as your user via a systemd **user** service. Needs only
-  membership in the `input` group (to grab keyd's virtual devices) and the logind
-  `uaccess` ACL on `/dev/uinput` (present in a normal graphical session).
+- **No root daemon.** Runs as your user via a systemd **user** service, using
+  logind `uaccess` ACLs on keyd's virtual keyboard and on `/dev/uinput` (present
+  in a normal graphical session). No `input`-group membership needed.
 
 ## Install
 
@@ -110,9 +110,11 @@ systemctl --user is-active apostrophed
 journalctl --user -u apostrophed -f
 ```
 
-> If you're not in the `input` group yet: `sudo usermod -aG input $USER`, then log
-> out and back in. That is the only privileged step, and it's a one-time account
-> change — the daemon itself never runs as root.
+> If you can't already open keyd's virtual keyboard, `install.sh` asks for sudo
+> once to install `/etc/udev/rules.d/70-apostrophed.rules`, which tags **only**
+> that device with `uaccess` so your active session gets an ACL on it. That is the
+> only privileged step — the daemon itself never runs as root. (The `input` group
+> would also work, but it opens every input device to every process you run.)
 
 ## Uninstall
 

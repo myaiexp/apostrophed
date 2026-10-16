@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import glob
 import os
 import select
 import signal
@@ -69,8 +70,26 @@ def find_device(name: str, timeout: float = 30.0) -> evdev.InputDevice:
                 return dev
             dev.close()
         if time.monotonic() >= deadline:
+            # evdev.list_devices() skips nodes we can't open, so a present-but-
+            # unreadable device looks "missing". Sysfs names are world-readable:
+            # tell the two apart, or a lost ACL/group reads as "is keyd running?".
+            if _device_present(name):
+                raise RuntimeError(
+                    f"device {name!r} exists but is not accessible — re-run "
+                    "install.sh to grant access (udev uaccess rule)")
             raise RuntimeError(f"device {name!r} not found within {timeout:.0f}s")
         time.sleep(0.2)
+
+
+def _device_present(name: str) -> bool:
+    for p in glob.glob("/sys/class/input/event*/device/name"):
+        try:
+            with open(p) as f:
+                if f.read().strip() == name:
+                    return True
+        except OSError:
+            continue
+    return False
 
 
 def _open_pointer(name: str) -> evdev.InputDevice | None:

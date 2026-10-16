@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Deploy apostrophed as a systemd *user* service. No root required: the daemon
-# runs as you, using input-group access to keyd's virtual devices and the logind
-# uaccess ACL on /dev/uinput. Idempotent: re-runnable.
+# Deploy apostrophed as a systemd *user* service. The daemon runs as you, using
+# logind uaccess ACLs on keyd's virtual keyboard and on /dev/uinput. The one
+# privileged step — a udev rule granting that keyboard ACL — runs via sudo only
+# when you can't already open the device. Idempotent: re-runnable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,14 +17,6 @@ UNIT="$UNIT_DIR/apostrophed.service"
 
 if [[ $EUID -eq 0 ]]; then
     echo "error: run as your normal user, NOT root — this is a user service" >&2
-    exit 1
-fi
-
-# You must be able to grab keyd's virtual devices (input group) and open
-# /dev/uinput (logind uaccess ACL, present in a graphical session).
-if ! id -nG | tr ' ' '\n' | grep -qx input; then
-    echo "error: $USER is not in the 'input' group (needed to grab keyd devices)" >&2
-    echo "       fix with: sudo usermod -aG input $USER   (then log out/in)" >&2
     exit 1
 fi
 
@@ -79,6 +72,39 @@ if ! grep -qixF "$DEVICE_NAME" /sys/class/input/*/name 2>/dev/null; then
     echo "       check:    systemctl status keyd" >&2
     echo "       (override the expected name with APOSTROPHED_DEVICE_NAME=...)" >&2
     exit 1
+fi
+
+# Access to the device: a udev rule tags *only* this keyboard with uaccess, so
+# logind ACLs it to the active session's user — the mechanism that already grants
+# /dev/uinput. Not the `input` group: that opens every input node to every process
+# you run (distros like Omarchy now strip it as a keylogging hole). Skipped when
+# you can already open the node (e.g. still in `input`).
+UDEV_RULE=/etc/udev/rules.d/70-apostrophed.rules  # must sort before 73-seat-late
+device_node() {
+    local n
+    for n in /sys/class/input/event*/device/name; do
+        if [[ "$(<"$n")" == "$DEVICE_NAME" ]]; then
+            n="${n%/device/name}"; echo "/dev/input/${n##*/}"; return
+        fi
+    done
+}
+NODE="$(device_node)"
+if [[ ! -r "$NODE" || ! -w "$NODE" ]]; then
+    echo "==> granting your session access to '$DEVICE_NAME' -> $UDEV_RULE (sudo)"
+    printf '%s\n' \
+        "# Installed by apostrophed's install.sh: logind grants the active session's" \
+        "# user an ACL on this one virtual keyboard (no input-group membership needed)." \
+        "ACTION==\"add|change\", SUBSYSTEM==\"input\", KERNEL==\"event*\", ATTRS{name}==\"$DEVICE_NAME\", TAG+=\"uaccess\"" \
+        | sudo tee "$UDEV_RULE" >/dev/null
+    sudo udevadm control --reload
+    sudo udevadm trigger --action=change "$NODE"
+    udevadm settle
+    if [[ ! -r "$NODE" || ! -w "$NODE" ]]; then
+        echo "error: still can't open $NODE after installing $UDEV_RULE" >&2
+        echo "       uaccess only applies to the active local session — run this" >&2
+        echo "       from your graphical session, not over ssh from elsewhere" >&2
+        exit 1
+    fi
 fi
 
 echo "==> installing package -> $LIB_DIR"

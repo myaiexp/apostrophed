@@ -3,7 +3,7 @@
 # install.sh deployed. The exact inverse of install.sh — same PREFIX/
 # XDG_CONFIG_HOME overrides, so a custom-prefix install is removed by running this
 # with the same PREFIX. Idempotent: safe to run when nothing (or only part) is
-# installed. Runs entirely as your user; no root.
+# installed. Runs as your user; sudo only to remove the udev rule, if present.
 set -euo pipefail
 
 if [[ $EUID -eq 0 ]]; then
@@ -41,6 +41,15 @@ rm -f "$BIN" "$WAYBAR_BIN"
 # The service's RuntimeDirectory is auto-removed on stop; this also clears state
 # left behind by a manual (non-service) run.
 rm -rf "$RUNTIME_DIR"
+
+# The device-access udev rule is the one root-owned file install.sh may have
+# placed; only prompt for sudo when it's actually there.
+UDEV_RULE=/etc/udev/rules.d/70-apostrophed.rules
+if [[ -e "$UDEV_RULE" ]]; then
+    echo "==> removing udev access rule $UDEV_RULE (sudo)"
+    sudo rm -f "$UDEV_RULE"
+    sudo udevadm control --reload
+fi
 
 echo
 echo "apostrophed removed. Your keyboard is unaffected — Hyprland falls back to"

@@ -132,18 +132,20 @@ the exact mechanism.
 
 Why unprivileged works:
 
-- **evdev grab:** keyd's virtual devices are `root:input 0660`, and the user is in
-  the `input` group → the user can open and `EVIOCGRAB` them. (A grab attempt while
-  the old root instance held the device failed with `EBUSY`, *not* `EACCES` —
-  proving the open/permission path is fine.)
+- **evdev grab:** keyd's virtual devices are `root:input 0660`. A udev rule
+  (`/etc/udev/rules.d/70-apostrophed.rules`, written by `install.sh`) tags *only*
+  `keyd virtual keyboard` with `uaccess`, so logind ACLs it `rw` to the active-seat
+  user, who can then open and `EVIOCGRAB` it. This originally relied on `input`-group
+  membership, until Omarchy stripped that group from users as a keylogging hole
+  (any process could read every input node) — the per-device ACL is the narrow grant.
 - **uinput:** `/dev/uinput` carries a logind `uaccess` ACL granting the active-seat
-  user `rw`, so the user can create the emit device. No custom udev rule needed.
+  user `rw`, so the user can create the emit device.
 
 Concretely:
 
 - **User service:** unit at `~/.config/systemd/user/apostrophed.service`
   (`WantedBy=default.target`), launcher at `~/.local/bin/apostrophed`, installed by
-  a **no-sudo** `install.sh`. Runs as the logged-in user; starts with the session.
+  `install.sh` (sudo only for the one-time udev rule). Runs as the logged-in user; starts with the session.
 - **The toggle is now a plain signal to your own process**, which is what makes the
   keybind + waybar wiring privilege-free (no sudoers, no polkit, no FIFO).
 - **Startup ordering:** no cross-manager `After=keyd.service` (a user unit can't

@@ -10,8 +10,9 @@
 - **Language**: Python (`python-evdev`), mirroring the `g915-gkeys` daemon's evdev
   approach (but unprivileged — root turned out to be unnecessary, see below).
 - **Runtime**: systemd **user** service, installed under `~/.local`. Runs as the
-  logged-in user via `input`-group access to keyd's virtual devices + the logind
-  `uaccess` ACL on `/dev/uinput`. **No root** (the toggle is a plain signal to your
+  logged-in user via logind `uaccess` ACLs on keyd's virtual keyboard (a udev rule
+  `install.sh` writes — *not* the `input` group, which Omarchy strips as a
+  keylogging hole) and on `/dev/uinput`. **No root daemon** (the toggle is a plain signal to your
   own process — that's what makes the keybind/waybar wiring privilege-free).
 - **Platform**: Wayland / Hyprland, keyboard layout `fi`.
 
